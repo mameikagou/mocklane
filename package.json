@@ -1,6 +1,6 @@
 {
   "name": "mocklane",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A small, AI-first browser API mock tool for Chrome and Tabbit.",
   "type": "module",
   "bin": {

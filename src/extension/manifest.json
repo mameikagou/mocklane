@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mocklane",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-first Fetch and XMLHttpRequest mocks managed by Mocklane CLI.",
   "permissions": [],
   "host_permissions": ["<all_urls>"],

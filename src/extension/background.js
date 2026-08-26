@@ -1,6 +1,7 @@
 import { createState, recordHit } from '../core/state.mjs';
 import { normalizeState } from '../core/schema.mjs';
 import { executeStoredCommand } from '../core/command-runner.mjs';
+import { createWebSocketKeepalive } from './keepalive.mjs';
 
 /*
  * Rspack entry for the MV3 service worker. IndexedDB and the daemon socket
@@ -18,6 +19,7 @@ import { executeStoredCommand } from '../core/command-runner.mjs';
   let daemonSocket = null;
   let daemonReconnectTimer = null;
   let commandQueue = Promise.resolve();
+  const daemonKeepalive = createWebSocketKeepalive({ getSocket: () => daemonSocket });
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -97,16 +99,21 @@ import { executeStoredCommand } from '../core/command-runner.mjs';
 
   function connectDaemon() {
     if (daemonSocket && (daemonSocket.readyState === WebSocket.CONNECTING || daemonSocket.readyState === WebSocket.OPEN)) return;
+    daemonKeepalive.stop();
+    let socket;
     try {
-      daemonSocket = new WebSocket('ws://127.0.0.1:17321/ws');
+      socket = new WebSocket('ws://127.0.0.1:17321/ws');
     } catch {
       scheduleReconnect();
       return;
     }
-    daemonSocket.onopen = () => {
+    daemonSocket = socket;
+    socket.onopen = () => {
+      if (daemonSocket !== socket) return;
+      daemonKeepalive.start();
       sendDaemon({ kind: 'hello', role: 'extension' });
     };
-    daemonSocket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       if (message.kind !== 'rpc') return;
@@ -116,10 +123,12 @@ import { executeStoredCommand } from '../core/command-runner.mjs';
         }
       });
     };
-    daemonSocket.onerror = () => {
-      try { daemonSocket.close(); } catch { /* socket is already closed */ }
+    socket.onerror = () => {
+      try { socket.close(); } catch { /* socket is already closed */ }
     };
-    daemonSocket.onclose = () => {
+    socket.onclose = () => {
+      if (daemonSocket !== socket) return;
+      daemonKeepalive.stop();
       daemonSocket = null;
       scheduleReconnect();
     };

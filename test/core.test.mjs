@@ -5,6 +5,7 @@ import { findMatchingRule, matchesRule } from '../src/core/matcher.mjs';
 import { applyStateCommand, createState, recordHit } from '../src/core/state.mjs';
 import { installFetchInterceptor, installXHRInterceptor } from '../src/core/interceptor.mjs';
 import { executeStoredCommand } from '../src/core/command-runner.mjs';
+import { createWebSocketKeepalive, KEEPALIVE_INTERVAL_MS } from '../src/extension/keepalive.mjs';
 
 test('normalizes rule defaults and preserves an empty raw body', () => {
   const rule = normalizeRule({ id: 'empty', endpoint: '/empty' }, { now: '2025-01-01T00:00:00.000Z' });
@@ -67,6 +68,33 @@ test('read-only commands do not write storage or broadcast state', async () => {
   }
   assert.equal(writes, 0);
   assert.equal(broadcasts, 0);
+});
+
+test('WebSocket keepalive uses one sub-30-second interval and cleans it on stop', () => {
+  assert.ok(KEEPALIVE_INTERVAL_MS < 30_000);
+  const socket = { readyState: 1, sent: [], send(value) { this.sent.push(JSON.parse(value)); } };
+  const scheduled = [];
+  const cleared = [];
+  const keepalive = createWebSocketKeepalive({
+    getSocket: () => socket,
+    setIntervalFn(callback, delay) {
+      const timer = { callback, delay };
+      scheduled.push(timer);
+      return timer;
+    },
+    clearIntervalFn(timer) { cleared.push(timer); },
+  });
+  assert.equal(keepalive.start(), true);
+  assert.equal(keepalive.start(), false);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delay, KEEPALIVE_INTERVAL_MS);
+  scheduled[0].callback();
+  assert.deepEqual(socket.sent, [{ kind: 'keepalive' }]);
+  assert.equal(keepalive.active, true);
+  assert.equal(keepalive.stop(), true);
+  assert.equal(keepalive.stop(), false);
+  assert.deepEqual(cleared, [scheduled[0]]);
+  assert.equal(keepalive.active, false);
 });
 
 test('fetch interception uses Request.method and returns status, headers, and raw body', async () => {
