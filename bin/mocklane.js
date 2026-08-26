@@ -2,7 +2,9 @@
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { startDaemon } from '../src/daemon/server.mjs';
+import { normalizeBrowserRequest } from '../src/core/request.mjs';
 
 const DEFAULT_PORT = 17321;
 
@@ -28,6 +30,7 @@ function help() {
         global: 'global on|off',
         logs: 'logs [--limit N]',
         match: 'match --url <url> [--method GET]',
+        request: 'request --url <url> [--method GET] [--headers JSON] [--body text] [--timeout ms] [--native] [--tab-id ID]',
       },
     },
   });
@@ -43,7 +46,7 @@ function flag(args, name) {
 }
 
 function positional(args) {
-  const valueOptions = new Set(['--port', '--host', '--file', '--json', '--rule', '--scenario', '--limit', '--url', '--method', '--value']);
+  const valueOptions = new Set(['--port', '--host', '--file', '--json', '--rule', '--scenario', '--limit', '--url', '--method', '--value', '--headers', '--body', '--timeout', '--tab-id']);
   return args.filter((value, index) => !value.startsWith('-') && !valueOptions.has(args[index - 1]));
 }
 
@@ -73,6 +76,25 @@ function commandFromArgs(command, args) {
   }
   if (command === 'logs') return { name: command, payload: { limit: Number(option(args, '--limit', 50)) || 50 } };
   if (command === 'match') return { name: command, payload: { url: option(args, '--url', values[0] || ''), method: option(args, '--method', 'GET') } };
+  if (command === 'request') {
+    const headersText = option(args, '--headers');
+    let headers = {};
+    if (headersText !== undefined) {
+      try { headers = JSON.parse(headersText); } catch {
+        throw Object.assign(new Error('headers must be valid JSON'), { code: 'invalid_headers' });
+      }
+    }
+    const input = {
+      url: option(args, '--url', values[0] || ''),
+      method: option(args, '--method', 'GET'),
+      headers,
+      ...(args.includes('--body') ? { body: option(args, '--body', '') } : {}),
+      ...(option(args, '--timeout') === undefined ? {} : { timeout: option(args, '--timeout') }),
+      native: flag(args, '--native'),
+      ...(option(args, '--tab-id') === undefined ? {} : { tabId: option(args, '--tab-id') }),
+    };
+    return { name: command, payload: normalizeBrowserRequest(input) };
+  }
   throw Object.assign(new Error(`unknown command: ${command}`), { code: 'unknown_command' });
 }
 
@@ -149,7 +171,11 @@ async function main() {
   print(result);
 }
 
-main().catch((error) => {
-  print({ ok: false, error: { code: error.code || 'cli_error', message: error.message || String(error) } });
-  process.exitCode = 1;
-});
+export { commandFromArgs, parsePort };
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  main().catch((error) => {
+    print({ ok: false, error: { code: error.code || 'cli_error', message: error.message || String(error) } });
+    process.exitCode = 1;
+  });
+}

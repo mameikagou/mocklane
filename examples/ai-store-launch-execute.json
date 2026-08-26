@@ -1,0 +1,28 @@
+{
+  "id": "ai-store-launch-execute",
+  "endpoint": "/__mocklane__/ai-store-launch/execute",
+  "matchType": "contains",
+  "method": "POST",
+  "enabled": true,
+  "scenarios": [
+    {
+      "id": "success",
+      "name": "Action accepted",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"success\":true}"
+    },
+    {
+      "id": "failure",
+      "name": "Action failed",
+      "status": 500,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"success\":false,\"message\":\"Mock action failed\"}"
+    }
+  ],
+  "activeScenarioId": "success"
+}

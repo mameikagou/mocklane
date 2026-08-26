@@ -1,0 +1,28 @@
+{
+  "id": "ai-store-launch-query",
+  "endpoint": "/__mocklane__/ai-store-launch/query",
+  "matchType": "contains",
+  "method": "POST",
+  "enabled": true,
+  "scenarios": [
+    {
+      "id": "enabled",
+      "name": "Assistant enabled",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"enabled\":true,\"readOnly\":false,\"messageList\":[]}"
+    },
+    {
+      "id": "disabled",
+      "name": "Assistant disabled",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": "{\"enabled\":false,\"readOnly\":false,\"messageList\":[]}"
+    }
+  ],
+  "activeScenarioId": "enabled"
+}

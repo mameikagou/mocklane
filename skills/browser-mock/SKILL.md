@@ -33,6 +33,21 @@ Every command emits one stable JSON object. Treat `{ "ok": false, "error": ... }
 
 The browser stores rules and logs in IndexedDB. The daemon has no durable state. `status`, `list`, `scenarios`, `logs`, and `match` are read-only queries; they do not write or broadcast state. A browser hit records one log entry and emits one transient hit event.
 
+## Debugging a page request
+
+Use `request` only when a deterministic page-context request is useful for debugging a loaded page:
+
+```bash
+node bin/mocklane.js request --url 'https://example.test/api/users' --method GET
+node bin/mocklane.js request --url 'https://example.test/api/orders' --method POST \
+  --headers '{"content-type":"application/json"}' --body '{"preview":true}' --timeout 5000
+node bin/mocklane.js request --url 'https://example.test/api/users' --native
+```
+
+The default target is the active tab; `--tab-id ID` selects one explicit tab. Browser-internal, extension, and Mocklane dashboard tabs are rejected. Default requests use that page's intercepted `window.fetch`; `--native` uses the original fetch saved before Mocklane installed its wrapper. The command returns stable JSON containing `status`, `headers`, and raw `body`, or a stable error code for network/CORS, timeout, missing bridge, or an unavailable tab. Response bodies are limited to 2 MiB. This is an execution/debugging helper, not a substitute for the application's own business call; it will not make React state update unless the page's normal code consumes the response.
+
+If application code hides a feature or returns early before issuing a request, do not use `request` as proof that the application works. Add an explicit runtime-only development switch in the application that selects a synthetic endpoint, then configure a Mocklane rule for that endpoint. The application's own Fetch/XHR call must consume the mocked response so its normal state update and rendering path execute. Let the explicit switch override backend configuration only while it is present; without the switch, use the formal backend configuration.
+
 ## Rule guidance
 
 - Use `contains` for a stable path fragment and `regex` only when the URL shape needs it.

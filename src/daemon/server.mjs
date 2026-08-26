@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
+import { DEFAULT_REQUEST_TIMEOUT_MS } from '../core/request.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = 17321;
 const MAX_HTTP_BODY = 1024 * 1024;
+const MAX_WEBSOCKET_PAYLOAD = 4 * 1024 * 1024;
 
 function isLoopbackHost(host) {
   return host === '127.0.0.1' || host === 'localhost' || host === '::1';
@@ -92,6 +94,16 @@ function commandResultError(code, message) {
   return { ok: false, error: { code, message } };
 }
 
+export function relayTimeoutForCommand(command, fallback = 5000) {
+  const commandName = String(command?.name || command?.command || '').toLowerCase();
+  const requestTimeout = Number(command?.payload?.timeout ?? command?.timeout);
+  if (commandName !== 'request') return fallback;
+  const timeout = Number.isInteger(requestTimeout) && requestTimeout > 0
+    ? requestTimeout
+    : DEFAULT_REQUEST_TIMEOUT_MS;
+  return timeout + 1000;
+}
+
 /**
  * Create the relay daemon. It owns sockets and pending request promises only;
  * no rule, scenario, or hit data is retained here.
@@ -104,7 +116,10 @@ export function createDaemonServer(options = {}) {
   const clients = new Set();
   const pending = new Map();
   let requestCounter = 0;
-  const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_HTTP_BODY });
+  // A request response may contain the full bounded page body (2 MiB) plus
+  // the JSON envelope, so the relay limit must be larger than the HTTP RPC
+  // input limit without becoming an unbounded message sink.
+  const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_WEBSOCKET_PAYLOAD });
 
   function extensionClient() {
     return [...clients].find((client) => client.role === 'extension' && client.socket.readyState === WebSocket.OPEN) || null;
@@ -126,11 +141,12 @@ export function createDaemonServer(options = {}) {
     const client = extensionClient();
     if (!client) return Promise.resolve(commandResultError('extension_not_connected', 'Mocklane extension is not connected'));
     const requestId = `daemon_${Date.now().toString(36)}_${requestCounter++}`;
+    const relayTimeout = relayTimeoutForCommand(command, options.rpcTimeout || 5000);
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         pending.delete(requestId);
         resolve(commandResultError('extension_timeout', 'Mocklane extension did not respond in time'));
-      }, options.rpcTimeout || 5000);
+      }, relayTimeout);
       pending.set(requestId, { resolve, timer });
       sendSocket(client, { kind: 'rpc', requestId, command });
     });

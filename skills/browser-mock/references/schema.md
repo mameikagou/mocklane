@@ -63,5 +63,24 @@ The CLI converts positional arguments to these command objects before sending th
 | `global on\|off` | `{ "name": "global", "payload": { "enabled": true\|false } }` |
 | `logs --limit 20` | `{ "name": "logs", "payload": { "limit": 20 } }` |
 | `match --url URL --method POST` | `{ "name": "match", "payload": { "url": "URL", "method": "POST" } }` |
+| `request --url URL [options]` | `{ "name": "request", "payload": { "url": "URL", "method": "GET", "headers": {}, "timeout": 10000, "native": false, "tabId": 17 } }` |
 
 Successful responses are `{ "ok": true, "data": ... }`. Errors use `{ "ok": false, "error": { "code": "...", "message": "..." } }`.
+
+## Page request payload and result
+
+`request` accepts an absolute `http` or `https` URL (or a page-relative path such as `/api/users`), an optional HTTP method (default `GET`), JSON object headers, an optional raw string body, a timeout from 1 to 30000 milliseconds, `--native`, and an optional tab ID. It uses the active tab when `tabId` is omitted and never writes rule state. A matched request may append the normal hit log entry.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "url": "https://example.test/api/users",
+    "status": 200,
+    "headers": {"content-type": "application/json"},
+    "body": "[{\"id\":1}]"
+  }
+}
+```
+
+Common stable request errors include `missing_url`, `invalid_url`, `invalid_headers`, `invalid_timeout`, `body_not_allowed`, `no_available_tab`, `tab_not_found`, `unsupported_tab`, `dashboard_tab_forbidden`, `tab_bridge_unavailable`, `request_timeout`, `network_error`, `response_too_large`, and `native_fetch_unavailable`.

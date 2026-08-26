@@ -1,4 +1,5 @@
 import { installInterceptors } from '../core/interceptor.mjs';
+import { executeBrowserRequest } from '../core/browser-request.mjs';
 
 /*
  * This file is an Rspack entry. The generated dist/extension/interceptor.js
@@ -12,6 +13,9 @@ import { installInterceptors } from '../core/interceptor.mjs';
   window.__mocklaneInterceptorInstalled = true;
 
   let state = { globalEnabled: false, rules: [] };
+  // Capture this before installing the wrapper. The request command can use
+  // it explicitly with --native to exercise the page's real network path.
+  const nativeFetch = window.fetch;
   installInterceptors(window, () => state, (hit) => {
     window.postMessage({
       source: 'mocklane-main',
@@ -28,6 +32,19 @@ import { installInterceptors } from '../core/interceptor.mjs';
       state = { ...state, globalEnabled: event.data.globalEnabled === true };
     } else if (event.data.type === 'state-rules') {
       state = { ...state, rules: Array.isArray(event.data.rules) ? event.data.rules : [] };
+    } else if (event.data.type === 'browser-request' && event.data.requestId) {
+      executeBrowserRequest(event.data.request, {
+        fetchImpl: window.fetch,
+        nativeFetch,
+        fetchThis: window,
+      }).then((result) => {
+        window.postMessage({
+          source: 'mocklane-main',
+          type: 'browser-response',
+          requestId: String(event.data.requestId),
+          result,
+        }, '*');
+      });
     }
   });
 }());

@@ -6,6 +6,9 @@ import { applyStateCommand, createState, recordHit } from '../src/core/state.mjs
 import { installFetchInterceptor, installXHRInterceptor } from '../src/core/interceptor.mjs';
 import { executeStoredCommand } from '../src/core/command-runner.mjs';
 import { createWebSocketKeepalive, KEEPALIVE_INTERVAL_MS } from '../src/extension/keepalive.mjs';
+import { executeBrowserRequest } from '../src/core/browser-request.mjs';
+import { DEFAULT_REQUEST_TIMEOUT_MS, MAX_RESPONSE_BODY_BYTES, normalizeBrowserRequest, targetTabFailure } from '../src/core/request.mjs';
+import { commandFromArgs } from '../bin/mocklane.js';
 
 test('normalizes rule defaults and preserves an empty raw body', () => {
   const rule = normalizeRule({ id: 'empty', endpoint: '/empty' }, { now: '2025-01-01T00:00:00.000Z' });
@@ -162,4 +165,89 @@ test('XHR interception keeps async load flow and exposes response properties', a
   assert.equal(xhr.getResponseHeader('X-Mock'), 'yes');
   assert.equal(hits.length, 1);
   restore();
+});
+
+test('normalizes browser request defaults and CLI arguments into one contract', async () => {
+  const normalized = normalizeBrowserRequest({ url: '/api', headers: { 'X-Trace': 42 } });
+  assert.equal(normalized.method, 'GET');
+  assert.equal(normalized.timeout, DEFAULT_REQUEST_TIMEOUT_MS);
+  assert.deepEqual(normalized.headers, { 'x-trace': '42' });
+  assert.equal(normalized.native, false);
+
+  const command = await commandFromArgs('request', [
+    '--url', 'https://example.test/api', '--method', 'post',
+    '--headers', '{"content-type":"application/json"}', '--body', '{}',
+    '--timeout', '2500', '--native', '--tab-id', '17',
+  ]);
+  assert.deepEqual(command, {
+    name: 'request',
+    payload: {
+      url: 'https://example.test/api',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+      timeout: 2500,
+      native: true,
+      tabId: 17,
+    },
+  });
+  assert.throws(() => commandFromArgs('request', ['--url', 'https://example.test', '--headers', '{']), { code: 'invalid_headers' });
+  assert.throws(() => commandFromArgs('request', ['--url', 'https://example.test', '--timeout', '0']), { code: 'invalid_timeout' });
+  assert.equal(targetTabFailure({ id: 1, url: 'https://app.example.test/home' }), null);
+  assert.equal(targetTabFailure({ id: 2, url: 'chrome://settings' })?.code, 'unsupported_tab');
+  assert.equal(targetTabFailure({ id: 3, url: 'http://127.0.0.1:17321/' })?.code, 'dashboard_tab_forbidden');
+});
+
+test('browser request executor follows mock and native fetch paths', async () => {
+  const state = {
+    globalEnabled: true,
+    rules: [normalizeRule({ id: 'request', endpoint: '/request', method: 'POST', scenarios: [{ id: 'mocked', status: 207, headers: { 'x-mock': 'yes' }, body: '{"mock":true}' }] })],
+  };
+  const target = {
+    Response,
+    fetch() { return Promise.resolve(new Response('{"native":true}', { status: 200, headers: { 'x-native': 'yes' } })); },
+  };
+  const nativeFetch = target.fetch;
+  const restore = installFetchInterceptor(target, () => state, () => {});
+  const mocked = await executeBrowserRequest({ url: 'https://example.test/request', method: 'POST', body: '{}' }, {
+    fetchImpl: target.fetch,
+    nativeFetch,
+    fetchThis: target,
+  });
+  assert.equal(mocked.ok, true);
+  assert.equal(mocked.data.status, 207);
+  assert.equal(mocked.data.headers['x-mock'], 'yes');
+  assert.equal(mocked.data.body, '{"mock":true}');
+
+  const native = await executeBrowserRequest({ url: 'https://example.test/request', method: 'POST', body: '{}', native: true }, {
+    fetchImpl: target.fetch,
+    nativeFetch,
+    fetchThis: target,
+  });
+  assert.equal(native.ok, true);
+  assert.equal(native.data.status, 200);
+  assert.equal(native.data.headers['x-native'], 'yes');
+  assert.equal(native.data.body, '{"native":true}');
+  restore();
+});
+
+test('browser request executor returns stable timeout, network, and size errors', async () => {
+  const timeout = await executeBrowserRequest({ url: 'https://example.test/slow', timeout: 5 }, {
+    fetchImpl: () => new Promise(() => {}),
+  });
+  assert.deepEqual(timeout.error?.code, 'request_timeout');
+
+  const network = await executeBrowserRequest({ url: 'https://example.test/offline' }, {
+    fetchImpl: () => Promise.reject(new TypeError('failed to fetch')),
+  });
+  assert.equal(network.error?.code, 'network_error');
+
+  const tooLarge = await executeBrowserRequest({ url: 'https://example.test/large' }, {
+    fetchImpl: () => Promise.resolve({
+      status: 200,
+      headers: {},
+      text: async () => 'x'.repeat(MAX_RESPONSE_BODY_BYTES + 1),
+    }),
+  });
+  assert.equal(tooLarge.error?.code, 'response_too_large');
 });

@@ -46,11 +46,30 @@ node bin/mocklane.js scenarios user-list
 node bin/mocklane.js switch user-list empty
 node bin/mocklane.js logs --limit 20
 node bin/mocklane.js match --url 'https://example.test/api/users' --method GET
+# Ask the active business tab to make a request through its page fetch.
+node bin/mocklane.js request --url 'https://example.test/api/users' --method GET
+# --native calls the original page fetch saved before Mocklane was installed.
+node bin/mocklane.js request --url 'https://example.test/api/checkout' --method POST \
+  --headers '{"content-type":"application/json"}' --body '{"dryRun":true}' --timeout 5000 --native
 node bin/mocklane.js disable user-list
 node bin/mocklane.js remove user-list
 ```
 
-Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, `enable`, `disable`, `remove`, `global`, `logs`, and `match`. Run `node bin/mocklane.js --help` for the complete argument shape.
+Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, `enable`, `disable`, `remove`, `global`, `logs`, `match`, and `request`. Run `node bin/mocklane.js --help` for the complete argument shape.
+
+`request` targets exactly one tab: the active tab by default, or the tab named by `--tab-id`. It refuses browser-internal, extension, and Mocklane dashboard tabs. The page's own `window.fetch` is used by default, so an enabled matching rule can answer it and create a normal hit log; `--native` bypasses the Mocklane wrapper. Results are stable JSON with `status`, `headers`, and raw `body`. Network/CORS failures, an unavailable bridge, and timeouts return stable error codes, and response bodies are capped at 2 MiB. This command is a debugging aid; it does not replace the application's own business call or make React state change by itself.
+
+### Runtime-gated UI example
+
+If an application hides a feature before making any request, `request` cannot update that application's React state. Give the application one explicit runtime-only switch and a synthetic endpoint, then let its normal request code run through Mocklane. The store-launch AI integration in `empower_permission_react` uses this pattern without changing Vite or CRA environment files:
+
+```bash
+node bin/mocklane.js apply --file examples/ai-store-launch-query.json
+node bin/mocklane.js apply --file examples/ai-store-launch-execute.json
+node bin/mocklane.js global on
+```
+
+Open the application with `?mocklaneAi=1` before its hash route, for example `home.html?mocklaneAi=1#/path`. When no formal backend endpoint is configured, the application requests `/__mocklane__/ai-store-launch/query` and `/__mocklane__/ai-store-launch/execute`; the two example rules answer those requests. Configured backend endpoints still take precedence.
 
 ## Rule format
 
@@ -87,6 +106,8 @@ page MAIN world interceptor ──postMessage──> isolated bridge ──runti
                                                                                      │
 Chrome extension ───────────── WebSocket ───────────── localhost daemon ─── CLI / React dashboard
                                                          (relay only)
+
+CLI request ── WebSocket RPC ──> service worker ──runtime message──> isolated bridge ──postMessage──> page fetch
 ```
 
 The MAIN-world script is intentionally tiny and does not use extension APIs. It is bundled from the same `src/core` matcher/interceptor modules used by tests. The isolated bridge is the only page-facing extension script and forwards hit events. The service worker handles browser IndexedDB, command mutations, and the daemon socket. State sync always sends the global switch before the rules to avoid a short enabled race. Read-only commands never write or broadcast state; hit events update the log and stream only the hit event.

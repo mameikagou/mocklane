@@ -1,6 +1,7 @@
 import { createState, recordHit } from '../core/state.mjs';
 import { normalizeState } from '../core/schema.mjs';
 import { executeStoredCommand } from '../core/command-runner.mjs';
+import { normalizeBrowserRequest, targetTabFailure } from '../core/request.mjs';
 import { createWebSocketKeepalive } from './keepalive.mjs';
 
 /*
@@ -71,6 +72,10 @@ import { createWebSocketKeepalive } from './keepalive.mjs';
     return { ok: false, error: { code: error.code || 'storage_error', message: error.message || String(error) } };
   }
 
+  function requestFailure(code, message) {
+    return { ok: false, error: { code, message } };
+  }
+
   function mutate(command) {
     commandQueue = commandQueue.then(async () => executeStoredCommand(command, {
       readState,
@@ -83,6 +88,80 @@ import { createWebSocketKeepalive } from './keepalive.mjs';
     }));
     commandQueue = commandQueue.catch(commandError);
     return commandQueue;
+  }
+
+  function getTargetTab(request) {
+    return new Promise((resolve) => {
+      if (request.tabId !== undefined) {
+        try {
+          chrome.tabs.get(request.tabId, (tab) => {
+            if (chrome.runtime.lastError || !tab) {
+              resolve({ error: requestFailure('tab_not_found', 'target tab was not found') });
+              return;
+            }
+            resolve({ tab });
+          });
+        } catch {
+          resolve({ error: requestFailure('tab_not_found', 'target tab was not found') });
+        }
+        return;
+      }
+      try {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+          if (chrome.runtime.lastError || !Array.isArray(tabs) || !tabs[0]) {
+            resolve({ error: requestFailure('no_available_tab', 'no active browser tab is available') });
+            return;
+          }
+          resolve({ tab: tabs[0] });
+        });
+      } catch {
+        resolve({ error: requestFailure('no_available_tab', 'no active browser tab is available') });
+      }
+    });
+  }
+
+  async function browserRequest(command) {
+    let request;
+    try { request = normalizeBrowserRequest(command?.payload || command); } catch (error) { return commandError(error); }
+    const target = await getTargetTab(request);
+    if (target.error) return target.error;
+    const tabError = targetTabFailure(target.tab);
+    if (tabError) return requestFailure(tabError.code, tabError.message);
+    if (target.tab.id == null) return requestFailure('no_available_tab', 'target tab has no id');
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish(requestFailure('request_timeout', 'browser request timed out')), request.timeout + 1000);
+      try {
+        chrome.tabs.sendMessage(target.tab.id, { type: 'browser-request', request }, (result) => {
+          if (chrome.runtime.lastError) {
+            finish(requestFailure('tab_bridge_unavailable', 'target tab does not have a Mocklane bridge'));
+            return;
+          }
+          if (!result || typeof result !== 'object') {
+            finish(requestFailure('empty_result', 'target tab returned no request result'));
+            return;
+          }
+          finish(result);
+        });
+      } catch {
+        finish(requestFailure('tab_bridge_unavailable', 'target tab does not have a Mocklane bridge'));
+      }
+    });
+  }
+
+  function commandName(command) {
+    return String(command?.name || command?.command || '').toLowerCase();
+  }
+
+  function executeCommand(command) {
+    return commandName(command) === 'request' ? browserRequest(command) : mutate(command);
   }
 
   function recordBrowserHit(rawHit) {
@@ -117,7 +196,7 @@ import { createWebSocketKeepalive } from './keepalive.mjs';
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       if (message.kind !== 'rpc') return;
-      mutate(message.command).then((result) => {
+      executeCommand(message.command).then((result) => {
         if (daemonSocket && daemonSocket.readyState === WebSocket.OPEN) {
           sendDaemon({ kind: 'rpc-result', requestId: message.requestId, result });
         }
@@ -154,7 +233,7 @@ import { createWebSocketKeepalive } from './keepalive.mjs';
       return true;
     }
     if (message.type === 'command') {
-      mutate(message.command || {}).then(sendResponse);
+      executeCommand(message.command || {}).then(sendResponse);
       return true;
     }
     return true;
