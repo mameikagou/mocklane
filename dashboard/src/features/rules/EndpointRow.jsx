@@ -10,7 +10,10 @@ function methodTone(method) {
 }
 
 function statusTone(status) {
-  return Number(status) >= 400 ? 'danger' : 'success';
+  const code = Number(status);
+  if (code >= 400) return 'danger';
+  if (code >= 300) return 'info';
+  return 'success';
 }
 
 function formatBody(body) {

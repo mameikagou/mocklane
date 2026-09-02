@@ -142,4 +142,5 @@ dashboard/src/
 - `ui/` 原语保持无状态、不 import lib/；`features/*` 可以 import ui/ 和 lib/store.js，不许跨 feature 互相 import（共享逻辑下沉到 lib/）。
 - 新功能 = 在 `features/` 下开新域目录 + 在 `App.jsx` 组合；App 内不写业务逻辑。
 - 事件上限、RPC 超时等常数留在对应 lib 文件顶部，不散落到组件。
+- **class 名必须是字面量**：Tailwind 的 purge 扫描器只认源码里完整出现的字符串。`badge-${tone}` 这类动态拼接会在生产构建里静默丢失整条规则（badge/button 的色调曾因此被清空）。带变体的组件用字面量映射表（见 `ui/Badge.jsx` 的 `TONES`）。
 
