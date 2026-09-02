@@ -1,103 +1,97 @@
+<div align="center">
+
 # Mocklane
 
-Mocklane is a small, local-first browser API mock tool. It lets an AI agent or a developer define endpoint rules from a stable CLI, switch response scenarios, and see hit logs while working in Chrome or Tabbit.
+**Deterministic browser API mocking, built for AI agents.**
 
-The extension owns the data in IndexedDB. The localhost daemon only relays WebSocket messages between the extension, CLI, and dashboard; it deliberately keeps no second copy of rules or logs.
+Local-first Chrome MV3 extension + localhost relay + CLI.
+Define endpoint rules once, switch response scenarios live, watch every hit — without leaving the page you're debugging.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-amber)](LICENSE)
+[![Chrome MV3](https://img.shields.io/badge/chrome-MV3-blue)](src/extension/manifest.json)
+[![Runtime: Bun](https://img.shields.io/badge/runtime-bun-black)](package.json)
+
+</div>
+
+---
+
+## Why Mocklane
+
+Most mock tools force a choice: a GUI app that agents can't drive, or a code-level interceptor the browser never sees. Mocklane is designed around a third option — **the CLI is the product, the dashboard is the observer**:
+
+| | |
+|---|---|
+| **AI-first contract** | Every command prints exactly one stable JSON object per line. No interactive prompts, no TTY formatting — an agent can parse everything. Ships with a ready-made agent skill ([`skills/browser-mock`](skills/browser-mock/SKILL.md)) so coding agents know how to drive it. |
+| **Single source of truth** | Rules and hit logs live in the browser's IndexedDB, owned by the extension. The daemon is a **relay only** — it keeps no second copy, can't drift, and has nothing to corrupt. |
+| **Fail-safe by default** | The global switch starts **off**. A rule never touches traffic until you explicitly enable it and flip the gate. State sync always sends the switch before the rules, so there's no enabled-race window. |
 
 ## Quick start
 
 ```bash
 bun install --frozen-lockfile
 bun run build
-bun run bin/mocklane.js daemon --background
+bun run bin/mocklane.js daemon --background   # prints {"pid": ..., "address": ...}
 ```
 
-Load `dist/extension` in `chrome://extensions` with **Developer mode → Load unpacked**. Open the dashboard at <http://127.0.0.1:17321/>. The default global switch is off, so a rule never changes traffic until it is explicitly enabled.
+Then:
 
-The background form prints a stable JSON object containing the daemon PID and address. Stop it with `kill <pid>` when finished. The extension intentionally connects only to `127.0.0.1:17321`; `--port` is for dashboard/CLI debugging and does not move the extension connection:
+1. Load `dist/extension` in `chrome://extensions` → **Developer mode → Load unpacked**
+2. Open the dashboard at <http://127.0.0.1:17321/>
+3. Stop the daemon later with `kill <pid>`
+
+> The extension intentionally connects only to `127.0.0.1:17321`. `daemon --port` is for isolated dashboard/CLI debugging — it does not move the extension connection.
+
+## The agent loop
+
+A complete mock cycle in six commands — exactly how an agent drives it:
 
 ```bash
-bun run bin/mocklane.js daemon --port 17322
+mocklane status                                  # 1 · is the bridge up?
+mocklane apply --file rule.json                  # 2 · create or replace a rule
+mocklane enable user-list && mocklane global on  # 3 · arm one rule, then the gate
+mocklane switch user-list empty                  # 4 · flip the live scenario
+mocklane logs --limit 20                         # 5 · verify the hits
+mocklane global off                              # 6 · leave the page clean
 ```
 
-Use `bun run bin/mocklane.js daemon` when running in the foreground. Keep the default `17321` for a connected extension.
+A rule is one endpoint plus named scenarios, with exactly one active:
 
-## CLI examples
-
-Every command prints one JSON object on one line. The examples below assume the daemon and extension are connected.
-
-```bash
-# Create one endpoint with two response scenarios.
-bun run bin/mocklane.js apply --json '{
+```json
+{
   "id": "user-list",
   "endpoint": "/api/users",
   "matchType": "contains",
   "method": "GET",
   "scenarios": [
-    {"id":"ok","name":"OK","status":200,"headers":{"content-type":"application/json"},"body":"[{\"id\":1}]"},
-    {"id":"empty","name":"Empty","status":200,"headers":{"content-type":"application/json"},"body":"[]"}
+    { "id": "ok",    "name": "OK",    "status": 200, "headers": {"content-type": "application/json"}, "body": "[{\"id\":1}]" },
+    { "id": "empty", "name": "Empty", "status": 200, "headers": {"content-type": "application/json"}, "body": "[]" }
   ],
   "activeScenarioId": "ok"
-}'
-
-bun run bin/mocklane.js global on
-bun run bin/mocklane.js list
-bun run bin/mocklane.js scenarios user-list
-bun run bin/mocklane.js switch user-list empty
-bun run bin/mocklane.js logs --limit 20
-bun run bin/mocklane.js match --url 'https://example.test/api/users' --method GET
-# Ask the active business tab to make a request through its page fetch.
-bun run bin/mocklane.js request --url 'https://example.test/api/users' --method GET
-# --native calls the original page fetch saved before Mocklane was installed.
-bun run bin/mocklane.js request --url 'https://example.test/api/checkout' --method POST \
-  --headers '{"content-type":"application/json"}' --body '{"dryRun":true}' --timeout 5000 --native
-bun run bin/mocklane.js disable user-list
-bun run bin/mocklane.js remove user-list
-```
-
-Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, `enable`, `disable`, `remove`, `global`, `logs`, `match`, and `request`. Run `bun run bin/mocklane.js --help` for the complete argument shape.
-
-`request` targets exactly one tab: the active tab by default, or the tab named by `--tab-id`. It refuses browser-internal, extension, and Mocklane dashboard tabs. The page's own `window.fetch` is used by default, so an enabled matching rule can answer it and create a normal hit log; `--native` bypasses the Mocklane wrapper. Results are stable JSON with `status`, `headers`, and raw `body`. Network/CORS failures, an unavailable bridge, and timeouts return stable error codes, and response bodies are capped at 2 MiB. This command is a debugging aid; it does not replace the application's own business call or make React state change by itself.
-
-### Runtime-gated UI example
-
-If an application hides a feature before making any request, `request` cannot update that application's React state. A runtime-only switch may bypass that UI gate, but it must not rewrite the business URL, method, or request payload. Let the application's normal request run unchanged and configure Mocklane against the real endpoint. The store-launch AI integration uses `/sdt/aventador/event/query` and `/sdt/aventador/event/execute` in both native and mocked modes:
-
-```bash
-bun run bin/mocklane.js apply --file examples/ai-store-launch-query.json
-bun run bin/mocklane.js apply --file examples/ai-store-launch-execute.json
-bun run bin/mocklane.js global on
-```
-
-Open the application with `?mocklaneAi=1` before its hash route, for example `home.html?mocklaneAi=1#/path`. The switch affects preview visibility only. The two rules answer the unchanged `/sdt` requests, whose business payload still contains only `appNo`, `tenantId`, `client`, and the normal execute fields.
-
-The example rules keep response payloads in `examples/payloads/*.json` and refer to them with `bodyFile`. Paths are resolved relative to the rule file passed to `apply --file`; Mocklane reads the file into the scenario response without adding anything to the browser request payload.
-
-## Rule format
-
-```json
-{
-  "id": "checkout-error",
-  "endpoint": "/api/checkout",
-  "matchType": "contains",
-  "method": "POST",
-  "enabled": true,
-  "scenarios": [
-    {
-      "id": "timeout",
-      "name": "Timeout",
-      "status": 504,
-      "headers": {"content-type": "application/json"},
-      "body": "{\"message\":\"upstream timeout\"}"
-    }
-  ],
-  "activeScenarioId": "timeout"
 }
 ```
 
-`endpoint` is matched with either `contains` (the default) or `regex`. `method` defaults to `GET` and is compared case-insensitively after normalization. A rule has one or more scenarios and exactly one active scenario. Response bodies stay raw strings, including an intentionally empty body. With `apply --file`, a scenario may use `bodyFile` instead of `body` to keep a JSON payload in a separate file. Status values normalize to Fetch-compatible `200..599`.
+`endpoint` matches by `contains` (default) or `regex`; `method` is case-insensitive; statuses normalize to Fetch-compatible `200..599`; bodies stay raw strings (an intentionally empty body is respected). With `apply --file`, a scenario may reference `bodyFile` to keep a large payload in its own file, resolved relative to the rule file. Full schema: [`skills/browser-mock/references/schema.md`](skills/browser-mock/references/schema.md).
 
-The full schema and command payloads are in [`skills/browser-mock/references/schema.md`](skills/browser-mock/references/schema.md).
+### Command reference
+
+| Command | Purpose |
+|---|---|
+| `daemon [--background] [--port]` | Run the relay; background form prints PID + address as JSON |
+| `status` | Daemon, extension bridge, and global-switch state |
+| `apply --json / --file` | Create or replace a rule |
+| `list` · `scenarios <id>` | Inspect normalized rules |
+| `enable` / `disable` / `remove <id>` | Rule lifecycle |
+| `global on` / `off` | The single gate for all mocking |
+| `switch <rule> <scenario>` | Change the live response without touching the page |
+| `logs [--limit N]` | Recent hits: time, request, scenario, status |
+| `match --url --method` | Dry-run the matcher against a URL |
+| `request --url [--tab-id] [--native]` | Ask a page tab to fetch — see below |
+
+`request` deserves a note: it asks **one** browser tab (active by default, or `--tab-id`) to perform a real page `fetch`, so an enabled rule can answer it and produce a normal hit log. `--native` bypasses the Mocklane wrapper and calls the original page fetch. Results are stable JSON with `status`, `headers`, raw `body`; network/CORS failures, a missing bridge, and timeouts return stable error codes; bodies cap at 2 MiB. It's a debugging aid — it deliberately refuses browser-internal and Mocklane dashboard tabs, and it cannot mutate a page's React state.
+
+## Dashboard
+
+<http://127.0.0.1:17321/> — a real-time arena console over the live socket: connection state, the global gate, per-rule scenario switching, and a streaming hit log. Dark-first, amber-on-deep-space, tabular numerals everywhere. Read-only with respect to rules: the CLI stays the write path.
 
 ## Architecture
 
@@ -108,26 +102,29 @@ page MAIN world interceptor ──postMessage──> isolated bridge ──runti
                                                                                      │
 Chrome extension ───────────── WebSocket ───────────── localhost daemon ─── CLI / React dashboard
                                                          (relay only)
-
-CLI request ── WebSocket RPC ──> service worker ──runtime message──> isolated bridge ──postMessage──> page fetch
 ```
 
-The MAIN-world script is intentionally tiny and does not use extension APIs. It is bundled from the same `src/core` matcher/interceptor modules used by tests. The isolated bridge is the only page-facing extension script and forwards hit events. The service worker handles browser IndexedDB, command mutations, and the daemon socket. State sync always sends the global switch before the rules to avoid a short enabled race. Read-only commands never write or broadcast state; hit events update the log and stream only the hit event.
+- The MAIN-world interceptor is intentionally tiny, uses no extension APIs, and is bundled from the same `src/core` matcher/interceptor modules covered by tests.
+- The isolated bridge is the only page-facing extension script; it forwards hit events.
+- The service worker owns IndexedDB, command mutations, and the daemon socket.
+- Read-only commands never write or broadcast state; a hit updates the log and streams only that hit.
 
-## Development and verification
+## Development
 
 ```bash
-bun run lint
-bun run typecheck
-bun run test
-bun run build
-bun run smoke
+bun run lint        # style
+bun run typecheck   # types
+bun run test        # node --test
+bun run build       # dist/extension + dist/dashboard + zip
+bun run smoke       # end-to-end sanity
 ```
 
-`bun run build` emits a loadable `dist/extension` directory, a bundled React/Rspack dashboard in `dist/dashboard`, and `dist/mocklane-extension.zip`. No `node_modules` directory is part of the extension artifact.
-
-This repository is distributed under the MIT License; see [`LICENSE`](LICENSE).
+`bun run build` emits a loadable `dist/extension`, the bundled React/Rspack dashboard in `dist/dashboard`, and `dist/mocklane-extension.zip`. No `node_modules` ships in the extension artifact. The dashboard source is feature-organized (`app/` composition, `lib/` transport + store, `features/` per domain) — see [`dashboard/DESIGN.md`](dashboard/DESIGN.md).
 
 ## Limitations
 
-Mocklane intentionally has a narrow scope: URL matching is only `contains` or `regex`; there is no declarativeNetRequest integration, account system, cloud storage, telemetry, or DevTools UI. XHR response properties are best-effort because browsers expose some native properties as non-configurable; event order and the common text/JSON response paths are preserved.
+Mocklane has a deliberately narrow scope. URL matching is `contains` or `regex` — nothing else. There is no declarativeNetRequest integration, no account system, no cloud storage, no telemetry, no DevTools panel. XHR response properties are best-effort (browsers expose some native properties as non-configurable); event order and the common text/JSON paths are preserved.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
