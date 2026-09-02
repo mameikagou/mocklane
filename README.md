@@ -136,7 +136,7 @@ A rule with `"page": "//staging.example."` only fires on pages whose own URL mat
 
 ## Dashboard
 
-<http://127.0.0.1:17321/> — a workbench status board over the live socket: gate state, bridge health, and a **now serving** view of which scenario each rule is currently answering with (per-rule hit counters included). Per-rule scenario switching stays one click away; the full hit log is one drawer away. Dark-first, amber-on-deep-space, tabular numerals everywhere. Read-only with respect to rules: the CLI stays the write path — the log stream itself is the agent's telemetry, consumed via `mocklane logs`.
+<http://127.0.0.1:17321/> — a workbench status board over the live socket: gate state, bridge health, and a **now serving** view of which scenario each rule is currently answering with (per-rule hit counters included). Expanding a rule row lists the URLs hitting it **live** — count, last-hit age, and the page host that triggered them — so "which rules are actually in effect right now" is one glance. Per-rule scenario switching stays one click away; the full hit log is one drawer away. Dark-first, amber-on-deep-space, tabular numerals everywhere. Read-only with respect to rules: the CLI stays the write path — the log stream itself is the agent's telemetry, consumed via `mocklane logs`.
 
 ## Architecture
 
