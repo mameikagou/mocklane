@@ -1,0 +1,9 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "enabled": false,
+    "readOnly": false,
+    "messageList": []
+  }
+}

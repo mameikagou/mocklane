@@ -61,7 +61,7 @@ Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, 
 
 ### Runtime-gated UI example
 
-If an application hides a feature before making any request, `request` cannot update that application's React state. Give the application one explicit runtime-only switch and a synthetic endpoint, then let its normal request code run through Mocklane. The store-launch AI integration in `empower_permission_react` uses this pattern without changing Vite or CRA environment files:
+If an application hides a feature before making any request, `request` cannot update that application's React state. A runtime-only switch may bypass that UI gate, but it must not rewrite the business URL, method, or request payload. Let the application's normal request run unchanged and configure Mocklane against the real endpoint. The store-launch AI integration uses `/sdt/aventador/event/query` and `/sdt/aventador/event/execute` in both native and mocked modes:
 
 ```bash
 node bin/mocklane.js apply --file examples/ai-store-launch-query.json
@@ -69,7 +69,9 @@ node bin/mocklane.js apply --file examples/ai-store-launch-execute.json
 node bin/mocklane.js global on
 ```
 
-Open the application with `?mocklaneAi=1` before its hash route, for example `home.html?mocklaneAi=1#/path`. When no formal backend endpoint is configured, the application requests `/__mocklane__/ai-store-launch/query` and `/__mocklane__/ai-store-launch/execute`; the two example rules answer those requests. Configured backend endpoints still take precedence.
+Open the application with `?mocklaneAi=1` before its hash route, for example `home.html?mocklaneAi=1#/path`. The switch affects preview visibility only. The two rules answer the unchanged `/sdt` requests, whose business payload still contains only `appNo`, `tenantId`, `client`, and the normal execute fields.
+
+The example rules keep response payloads in `examples/payloads/*.json` and refer to them with `bodyFile`. Paths are resolved relative to the rule file passed to `apply --file`; Mocklane reads the file into the scenario response without adding anything to the browser request payload.
 
 ## Rule format
 
@@ -93,7 +95,7 @@ Open the application with `?mocklaneAi=1` before its hash route, for example `ho
 }
 ```
 
-`endpoint` is matched with either `contains` (the default) or `regex`. `method` defaults to `GET` and is compared case-insensitively after normalization. A rule has one or more scenarios and exactly one active scenario. Response bodies stay raw strings, including an intentionally empty body. Status values normalize to Fetch-compatible `200..599`.
+`endpoint` is matched with either `contains` (the default) or `regex`. `method` defaults to `GET` and is compared case-insensitively after normalization. A rule has one or more scenarios and exactly one active scenario. Response bodies stay raw strings, including an intentionally empty body. With `apply --file`, a scenario may use `bodyFile` instead of `body` to keep a JSON payload in a separate file. Status values normalize to Fetch-compatible `200..599`.
 
 The full schema and command payloads are in [`skills/browser-mock/references/schema.md`](skills/browser-mock/references/schema.md).
 

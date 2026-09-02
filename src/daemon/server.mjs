@@ -109,10 +109,15 @@ export function relayTimeoutForCommand(command, fallback = 5000) {
  * no rule, scenario, or hit data is retained here.
  */
 export function createDaemonServer(options = {}) {
-  const projectRoot = path.resolve(HERE, '../..');
+  const projectRoot = options.projectRoot || path.resolve(HERE, '../..');
   const builtDashboard = path.join(projectRoot, 'dist/dashboard');
-  const sourceDashboard = path.join(projectRoot, 'dashboard');
-  const staticDir = options.staticDir || (fs.existsSync(path.join(builtDashboard, 'index.html')) ? builtDashboard : sourceDashboard);
+  // Resolve this lazily for every request. The daemon is often started before
+  // `npm run build`; pinning the missing source directory at startup made the
+  // extension action keep returning 404 even after the dashboard was built.
+  const dashboardStaticDir = () => {
+    if (options.staticDir) return options.staticDir;
+    return fs.existsSync(path.join(builtDashboard, 'index.html')) ? builtDashboard : null;
+  };
   const clients = new Set();
   const pending = new Map();
   let requestCounter = 0;
@@ -226,8 +231,9 @@ export function createDaemonServer(options = {}) {
       return;
     }
     if (request.method === 'GET' || request.method === 'HEAD') {
+      const staticDir = dashboardStaticDir();
       let filePath;
-      try { filePath = safeStaticPath(staticDir, requestUrl.pathname); } catch { filePath = null; }
+      try { filePath = staticDir ? safeStaticPath(staticDir, requestUrl.pathname) : null; } catch { filePath = null; }
       if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
         response.writeHead(200, { 'content-type': mimeFor(filePath), 'cache-control': 'no-store' });
         if (request.method === 'HEAD') response.end();

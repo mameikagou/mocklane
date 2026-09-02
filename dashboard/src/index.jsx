@@ -14,6 +14,8 @@ function Icon({ name, size = 16 }) {
   const paths = {
     pulse: <><path d="M3 12h3l2-7 4 14 2-7h4" /><path d="M21 12h-3" /></>,
     refresh: <><path d="M20 11a8 8 0 0 0-14.8-3L3 11M3 5v6h6M4 13a8 8 0 0 0 14.8 3L21 13m0 6v-6h-6" /></>,
+    sun: <><circle cx="12" cy="12" r="3.5" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" /></>,
+    moon: <path d="M20.5 14.2A7.8 7.8 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />,
   };
   return <svg aria-hidden="true" className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.pulse}</svg>;
 }
@@ -33,6 +35,12 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [lastError, setLastError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [theme, setTheme] = useState(() => window.localStorage.getItem('mocklane-theme') || 'light');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem('mocklane-theme', theme);
+  }, [theme]);
 
   const socketUrl = useMemo(() => {
     const host = window.location.hostname || '127.0.0.1';
@@ -185,10 +193,14 @@ function App() {
     } catch (error) { setLastError(error.message); }
   };
 
-  return <div className="app-shell min-h-screen bg-ml-bg text-ml-ink">
+  return <div className="app-shell">
     <header className="topbar">
       <div className="brand-lockup"><div className="brand-mark"><Icon name="pulse" size={18} /></div><div><div className="brand-name">Mocklane</div><div className="brand-subtitle">browser API workspace</div></div></div>
-      <div className="topbar-actions"><ConnectionStatus daemonConnected={daemonConnected} extensionConnected={extensionConnected} /><Button variant="ghost" onClick={refresh} title="Refresh state"><Icon name="refresh" size={15} />Refresh</Button></div>
+      <div className="topbar-actions">
+        <ConnectionStatus daemonConnected={daemonConnected} extensionConnected={extensionConnected} />
+        <Button variant="ghost" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}><Icon name={theme === 'light' ? 'moon' : 'sun'} size={15} />{theme === 'light' ? 'Dark' : 'Light'}</Button>
+        <Button variant="ghost" onClick={refresh} title="Refresh state"><Icon name="refresh" size={15} />Refresh</Button>
+      </div>
     </header>
 
     <main className="workspace">

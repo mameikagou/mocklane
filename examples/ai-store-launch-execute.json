@@ -1,6 +1,6 @@
 {
   "id": "ai-store-launch-execute",
-  "endpoint": "/__mocklane__/ai-store-launch/execute",
+  "endpoint": "/sdt/aventador/event/execute",
   "matchType": "contains",
   "method": "POST",
   "enabled": true,
@@ -12,7 +12,7 @@
       "headers": {
         "content-type": "application/json"
       },
-      "body": "{\"success\":true}"
+      "bodyFile": "payloads/ai-store-launch-execute-success.json"
     },
     {
       "id": "failure",
@@ -21,7 +21,7 @@
       "headers": {
         "content-type": "application/json"
       },
-      "body": "{\"success\":false,\"message\":\"Mock action failed\"}"
+      "bodyFile": "payloads/ai-store-launch-execute-failure.json"
     }
   ],
   "activeScenarioId": "success"

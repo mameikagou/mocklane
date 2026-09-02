@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { normalizeRule } from '../src/core/schema.mjs';
 import { findMatchingRule, matchesRule } from '../src/core/matcher.mjs';
 import { applyStateCommand, createState, recordHit } from '../src/core/state.mjs';
@@ -8,7 +11,7 @@ import { executeStoredCommand } from '../src/core/command-runner.mjs';
 import { createWebSocketKeepalive, KEEPALIVE_INTERVAL_MS } from '../src/extension/keepalive.mjs';
 import { executeBrowserRequest } from '../src/core/browser-request.mjs';
 import { DEFAULT_REQUEST_TIMEOUT_MS, MAX_RESPONSE_BODY_BYTES, normalizeBrowserRequest, targetTabFailure } from '../src/core/request.mjs';
-import { commandFromArgs } from '../bin/mocklane.js';
+import { commandFromArgs, parseRule } from '../bin/mocklane.js';
 
 test('normalizes rule defaults and preserves an empty raw body', () => {
   const rule = normalizeRule({ id: 'empty', endpoint: '/empty' }, { now: '2025-01-01T00:00:00.000Z' });
@@ -19,6 +22,32 @@ test('normalizes rule defaults and preserves an empty raw body', () => {
   assert.equal(rule.scenarios[0].body, '');
   assert.equal(normalizeRule({ endpoint: '/bad-status', status: 199 }).scenarios[0].status, 200);
   assert.equal(rule.createdAt, '2025-01-01T00:00:00.000Z');
+});
+
+test('loads scenario response payloads from JSON files relative to the rule', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mocklane-rule-'));
+  try {
+    await fs.mkdir(path.join(directory, 'payloads'));
+    await fs.writeFile(path.join(directory, 'payloads', 'enabled.json'), '{\n  "code": 0,\n  "data": {"enabled": true}\n}\n');
+    await fs.writeFile(path.join(directory, 'rule.json'), JSON.stringify({
+      endpoint: '/sdt/aventador/event/query',
+      method: 'POST',
+      scenarios: [{ id: 'enabled', bodyFile: 'payloads/enabled.json' }],
+    }));
+    const rule = await parseRule(['--file', path.join(directory, 'rule.json')]);
+    assert.equal(rule.endpoint, '/sdt/aventador/event/query');
+    assert.equal(rule.scenarios[0].body, '{\n  "code": 0,\n  "data": {"enabled": true}\n}\n');
+    assert.equal('bodyFile' in rule.scenarios[0], false);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('rejects ambiguous inline and file-backed response bodies', async () => {
+  await assert.rejects(
+    parseRule(['--json', '{"endpoint":"/api","body":"{}","bodyFile":"payload.json"}']),
+    (error) => error.code === 'ambiguous_body_source',
+  );
 });
 
 test('matches contains and regex rules with method normalization', () => {

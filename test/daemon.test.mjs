@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { WebSocket } from 'ws';
 import { isAllowedWebSocketOrigin, relayTimeoutForCommand, startDaemon } from '../src/daemon/server.mjs';
 
@@ -41,6 +44,24 @@ test('request relay timeout leaves margin for the page bridge', () => {
   assert.equal(relayTimeoutForCommand({ name: 'request', payload: { timeout: 3000 } }), 4000);
   assert.equal(relayTimeoutForCommand({ name: 'request' }), 11000);
   assert.equal(relayTimeoutForCommand({ name: 'status' }), 5000);
+});
+
+test('dashboard becomes available when it is built after daemon startup', async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mocklane-daemon-'));
+  const daemon = await startDaemon({ port: 0, projectRoot });
+  const rootUrl = `http://127.0.0.1:${daemon.address.port}/`;
+  try {
+    assert.equal((await fetch(rootUrl)).status, 404);
+    const dashboardDir = path.join(projectRoot, 'dist/dashboard');
+    await fs.mkdir(dashboardDir, { recursive: true });
+    await fs.writeFile(path.join(dashboardDir, 'index.html'), '<!doctype html><title>Mocklane test</title>');
+    const response = await fetch(rootUrl);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Mocklane test/);
+  } finally {
+    await daemon.close();
+    await fs.rm(projectRoot, { recursive: true, force: true });
+  }
 });
 
 test('daemon relays dashboard RPC to extension without owning rule data', async () => {

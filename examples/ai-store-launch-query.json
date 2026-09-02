@@ -1,6 +1,6 @@
 {
   "id": "ai-store-launch-query",
-  "endpoint": "/__mocklane__/ai-store-launch/query",
+  "endpoint": "/sdt/aventador/event/query",
   "matchType": "contains",
   "method": "POST",
   "enabled": true,
@@ -12,7 +12,7 @@
       "headers": {
         "content-type": "application/json"
       },
-      "body": "{\"enabled\":true,\"readOnly\":false,\"messageList\":[]}"
+      "bodyFile": "payloads/ai-store-launch-query-enabled.json"
     },
     {
       "id": "disabled",
@@ -21,7 +21,7 @@
       "headers": {
         "content-type": "application/json"
       },
-      "body": "{\"enabled\":false,\"readOnly\":false,\"messageList\":[]}"
+      "bodyFile": "payloads/ai-store-launch-query-disabled.json"
     }
   ],
   "activeScenarioId": "enabled"

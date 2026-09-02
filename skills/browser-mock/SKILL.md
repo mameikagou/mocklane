@@ -46,14 +46,14 @@ node bin/mocklane.js request --url 'https://example.test/api/users' --native
 
 The default target is the active tab; `--tab-id ID` selects one explicit tab. Browser-internal, extension, and Mocklane dashboard tabs are rejected. Default requests use that page's intercepted `window.fetch`; `--native` uses the original fetch saved before Mocklane installed its wrapper. The command returns stable JSON containing `status`, `headers`, and raw `body`, or a stable error code for network/CORS, timeout, missing bridge, or an unavailable tab. Response bodies are limited to 2 MiB. This is an execution/debugging helper, not a substitute for the application's own business call; it will not make React state update unless the page's normal code consumes the response.
 
-If application code hides a feature or returns early before issuing a request, do not use `request` as proof that the application works. Add an explicit runtime-only development switch in the application that selects a synthetic endpoint, then configure a Mocklane rule for that endpoint. The application's own Fetch/XHR call must consume the mocked response so its normal state update and rendering path execute. Let the explicit switch override backend configuration only while it is present; without the switch, use the formal backend configuration.
+If application code hides a feature or returns early before issuing a request, do not use `request` as proof that the application works. An explicit runtime-only switch may bypass the UI gate, but it must not replace the business endpoint or add Mocklane fields to the request payload. Configure the rule against the same URL and method used by the real backend, then let the application's unchanged Fetch/XHR call consume the mocked response through its normal state-update path.
 
 ## Rule guidance
 
 - Use `contains` for a stable path fragment and `regex` only when the URL shape needs it.
 - Specify `method`; it defaults to `GET` and is case-normalized.
 - Keep multiple response states as scenarios on one endpoint. Change `activeScenarioId` with `switch` rather than duplicating the rule.
-- Bodies are raw strings. Use `"body":""` for an empty response and JSON-encode JSON bodies yourself in the rule JSON.
+- Bodies are raw strings. Use `"body":""` for an empty response. With `apply --file`, prefer `"bodyFile":"payload.json"` when a JSON response is easier to maintain separately; the CLI resolves it relative to the rule file before sending the rule to the extension.
 - Use an explicit `status` and `headers` for response behavior that the browser code under test observes.
 
 Read [`references/schema.md`](references/schema.md) before generating a complex rule or troubleshooting a command payload.

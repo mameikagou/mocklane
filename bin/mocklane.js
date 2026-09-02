@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +22,7 @@ function help() {
         daemon: 'daemon [--background] [--port 17321] [--host 127.0.0.1]',
         status: 'status',
         list: 'list',
-        apply: 'apply --json <rule-json> | apply <rule-json> [--file path]',
+        apply: 'apply --json <rule-json> | apply <rule-json> [--file path] (supports bodyFile in rule/scenarios)',
         scenarios: 'scenarios <rule-id>',
         switch: 'switch <rule-id> <scenario-id>',
         enable: 'enable <rule-id>',
@@ -55,12 +56,38 @@ function parsePort(args) {
   return Number.isInteger(value) && value > 0 && value < 65536 ? value : DEFAULT_PORT;
 }
 
+async function hydrateBodyFile(source, baseDirectory) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
+  const output = { ...source };
+  const bodyFile = output.bodyFile ?? output.responseBodyFile;
+  if (bodyFile !== undefined && bodyFile !== null) {
+    if (output.body !== undefined || output.responseBody !== undefined) {
+      throw Object.assign(new Error('bodyFile cannot be combined with body or responseBody'), { code: 'ambiguous_body_source' });
+    }
+    const filePath = path.resolve(baseDirectory, String(bodyFile));
+    output.body = await fs.readFile(filePath, 'utf8');
+    delete output.bodyFile;
+    delete output.responseBodyFile;
+  }
+  if (Array.isArray(output.scenarios)) {
+    output.scenarios = await Promise.all(output.scenarios.map((scenario) => hydrateBodyFile(scenario, baseDirectory)));
+  }
+  if (output.scenario && typeof output.scenario === 'object') {
+    output.scenario = await hydrateBodyFile(output.scenario, baseDirectory);
+  }
+  return output;
+}
+
 async function parseRule(args) {
   const file = option(args, '--file');
   const raw = option(args, '--json') || args.find((value) => value.startsWith('{'));
-  if (file) return JSON.parse(await fs.readFile(file, 'utf8'));
+  if (file) {
+    const absoluteFile = path.resolve(file);
+    const rule = JSON.parse(await fs.readFile(absoluteFile, 'utf8'));
+    return hydrateBodyFile(rule, path.dirname(absoluteFile));
+  }
   if (!raw) throw Object.assign(new Error('apply requires --json or a JSON rule argument'), { code: 'missing_rule' });
-  return JSON.parse(raw);
+  return hydrateBodyFile(JSON.parse(raw), process.cwd());
 }
 
 function commandFromArgs(command, args) {
@@ -171,7 +198,7 @@ async function main() {
   print(result);
 }
 
-export { commandFromArgs, parsePort };
+export { commandFromArgs, hydrateBodyFile, parsePort, parseRule };
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   main().catch((error) => {

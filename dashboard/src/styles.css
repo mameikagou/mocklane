@@ -1,11 +1,55 @@
-/* Hallmark · macrostructure: Workbench · genre: technical-utilitarian */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V4 */
+/* Hallmark · macrostructure: Workbench · genre: technical-utilitarian · theme: light-cool */
+/* Hallmark · pre-emit critique: P5 H4 E5 S4 R5 V4 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    color-scheme: light;
+    --ml-bg: #f3f5f7;
+    --ml-surface: #ffffff;
+    --ml-surface-raised: #f8fafb;
+    --ml-control: #f7f9fa;
+    --ml-control-hover: #edf1f4;
+    --ml-border: #dce2e7;
+    --ml-border-subtle: #e9edf0;
+    --ml-border-strong: #c8d1d9;
+    --ml-ink-strong: #14202b;
+    --ml-ink: #1d2935;
+    --ml-ink-soft: #314151;
+    --ml-ink-mid: #425366;
+    --ml-ink-table: #4d5e70;
+    --ml-muted: #627184;
+    --ml-faint: #6e7d8d;
+    --ml-faint-strong: #586879;
+    --ml-meta: #aab4be;
+    --ml-accent: #087f5b;
+    --ml-accent-deep: #066747;
+    --ml-accent-border: #8ccab7;
+    --ml-accent-surface: #e7f5ef;
+    --ml-info: #2463a6;
+    --ml-info-surface: #eaf2fb;
+    --ml-warning: #985b0b;
+    --ml-warning-surface: #fff4dc;
+    --ml-danger: #b42318;
+    --ml-danger-border: #efb3ad;
+    --ml-danger-surface: #fdf0ef;
+    --ml-muted-surface: #edf1f4;
+    --ml-switch-border: #b8c3cd;
+    --ml-switch-thumb: #748293;
+    --ml-empty: #81909f;
+    --ml-empty-surface: #f5f7f9;
+    --ml-footer: #748291;
+    --ml-transparent: transparent;
+    --ml-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --ml-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --ml-duration-fast: 150ms;
+    --ml-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
     --ml-bg: #0b1117;
     --ml-surface: #121a23;
     --ml-surface-raised: #17222d;
@@ -40,11 +84,6 @@
     --ml-empty: #5d7384;
     --ml-empty-surface: #1a252e;
     --ml-footer: #4e5b69;
-    --ml-transparent: transparent;
-    --ml-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --ml-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    --ml-duration-fast: 150ms;
-    --ml-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   * { box-sizing: border-box; }
@@ -63,7 +102,7 @@
 
 @layer components {
   .app-shell { min-height: 100vh; background: var(--ml-bg); }
-  .topbar { height: 74px; border-bottom: 1px solid var(--ml-border); display: flex; align-items: center; justify-content: space-between; padding: 0 38px; background: var(--ml-bg); }
+  .topbar { height: 74px; border-bottom: 1px solid var(--ml-border); display: flex; align-items: center; justify-content: space-between; padding: 0 38px; background: var(--ml-surface); }
   .brand-lockup, .topbar-actions, .connection-status, .hero-meta, .panel-heading, .section-heading, .endpoint-line, .endpoint-meta, .endpoint-controls, .scenario-control, .log-request, .footer { display: flex; align-items: center; }
   .brand-lockup { gap: 11px; min-width: 0; }
   .brand-lockup > div:last-child { min-width: 0; }
