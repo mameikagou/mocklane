@@ -219,7 +219,7 @@
   .endpoint-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 22px; align-items: center; padding: 18px 2px; border-bottom: 1px solid var(--line-subtle); }
   .endpoint-row:last-child { border-bottom: 0; }
   .endpoint-row.is-muted { opacity: .58; }
-  .endpoint-summary { display: flex; flex: 1 1 auto; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+  .endpoint-summary { display: flex; flex: 1 1 0; align-items: center; gap: 10px; min-width: 0; border: 0; background: none; padding: 0; color: inherit; text-align: left; cursor: pointer; }
   .endpoint-summary:hover .endpoint-line code { color: var(--amber-core); }
   .endpoint-chevron { display: inline-flex; flex: 0 0 auto; color: var(--ink-3); transition: transform var(--dur-micro) var(--ease-expo), color var(--dur-micro) var(--ease-expo); }
   .endpoint-summary:hover .endpoint-chevron { color: var(--amber-core); }
