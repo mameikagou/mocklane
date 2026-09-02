@@ -23,10 +23,15 @@ export function createMockResponse(scenario, ResponseConstructor = globalThis.Re
   return new ResponseConstructor(safeBody, { status, headers: scenario?.headers || {} });
 }
 
-export function createFetchInterceptor({ originalFetch, getState, onHit, ResponseConstructor = globalThis.Response }) {
+function pageUrlOf(target) {
+  try { return String(target?.location?.href || ''); } catch { return ''; }
+}
+
+export function createFetchInterceptor({ originalFetch, getState, onHit, getPageUrl = () => '', ResponseConstructor = globalThis.Response }) {
   if (typeof originalFetch !== 'function') throw new TypeError('originalFetch must be a function');
   return function mocklaneFetch(input, init) {
-    const request = requestFromFetch(input, init);
+    const pageUrl = String(getPageUrl() || '');
+    const request = { ...requestFromFetch(input, init), pageUrl };
     const state = getState() || {};
     const matched = findMatchingRule(state.rules, request, { globalEnabled: state.globalEnabled });
     if (!matched) return originalFetch.call(this, input, init);
@@ -37,6 +42,7 @@ export function createFetchInterceptor({ originalFetch, getState, onHit, Respons
       method: request.method,
       scenarioId: matched.scenario.id,
       status: matched.scenario.status,
+      pageUrl,
     };
     onHit?.(hit);
     return Promise.resolve(createMockResponse(matched.scenario, ResponseConstructor));
@@ -46,7 +52,13 @@ export function createFetchInterceptor({ originalFetch, getState, onHit, Respons
 export function installFetchInterceptor(target, getState, onHit) {
   if (!target || typeof target.fetch !== 'function') return () => {};
   const original = target.fetch;
-  const wrapped = createFetchInterceptor({ originalFetch: original, getState, onHit, ResponseConstructor: target.Response || globalThis.Response });
+  const wrapped = createFetchInterceptor({
+    originalFetch: original,
+    getState,
+    onHit,
+    getPageUrl: () => pageUrlOf(target),
+    ResponseConstructor: target.Response || globalThis.Response,
+  });
   target.fetch = wrapped;
   return () => { target.fetch = original; };
 }
@@ -80,7 +92,8 @@ export function installXHRInterceptor(target, getState, onHit) {
   };
 
   proto.send = function mocklaneSend(body) {
-    const request = this.__mocklaneRequest || { method: 'GET', url: '' };
+    const pageUrl = pageUrlOf(target);
+    const request = { ...(this.__mocklaneRequest || { method: 'GET', url: '' }), pageUrl };
     const state = getState() || {};
     const matched = findMatchingRule(state.rules, request, { globalEnabled: state.globalEnabled });
     if (!matched) return originalSend.call(this, body);
@@ -97,6 +110,7 @@ export function installXHRInterceptor(target, getState, onHit) {
       method: request.method,
       scenarioId: scenario.id,
       status,
+      pageUrl,
     });
 
     const respond = () => {

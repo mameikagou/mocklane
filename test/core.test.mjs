@@ -59,6 +59,52 @@ test('matches contains and regex rules with method normalization', () => {
   assert.equal(findMatchingRule([regex, contains], { url: 'https://example.test/api/users', method: 'GET' }, { globalEnabled: false }), null);
 });
 
+// Real hostnames from the owner's environment matrix: local dev, a swimlane,
+// test, ST, and production share the same API endpoints, so page scope is the
+// only thing keeping a swimlane mock off the production tab.
+const SWIMLANE_PAGE = 'https://selftest-260821-104730-989-sl-qnh.shangou.test.meituan.com/home.html#/unifiedGoods/multi-channel-tools?appNo=2026090200003';
+const TEST_PAGE = 'https://qnh.shangou.test.meituan.com/home.html#/unifiedGoods/multi-channel-tools?appNo=2026090200003';
+const ST_PAGE = 'https://qnh.shangou.st.meituan.com/home.html#/unifiedGoods/multi-channel-tools';
+const PROD_PAGE = 'https://qnh.meituan.com/home.html#/unifiedGoods/multi-channel-tools';
+const LOCAL_PAGE = 'http://localhost:3000/#/permission_management/tenant/list?bizMode=convenience_store&current=1';
+
+test('page scope isolates environments and fails closed', () => {
+  const request = (pageUrl) => ({ url: 'https://qnh.meituan.com/sdt/aventador/event/query', method: 'POST', pageUrl });
+
+  const testRule = normalizeRule({ id: 'env-test', endpoint: '/sdt/aventador/event/query', method: 'POST', page: '//qnh.shangou.test.' });
+  assert.equal(matchesRule(testRule, request(TEST_PAGE)), true, 'test env fires on the test host');
+  assert.equal(matchesRule(testRule, request(SWIMLANE_PAGE)), false, 'test env must not fire inside the swimlane host');
+  assert.equal(matchesRule(testRule, request(ST_PAGE)), false, 'test env must not fire on ST');
+  assert.equal(matchesRule(testRule, request(PROD_PAGE)), false, 'test env must never fire on production');
+
+  const stRule = normalizeRule({ id: 'env-st', endpoint: '/sdt/aventador/event/query', method: 'POST', page: '//qnh.shangou.st.' });
+  assert.equal(matchesRule(stRule, request(ST_PAGE)), true);
+  assert.equal(matchesRule(stRule, request(TEST_PAGE)), false, 'ST anchor must not match te[st]. — the //host. boundary matters');
+
+  const localRule = normalizeRule({ id: 'env-local', endpoint: '/sdt/aventador/event/query', method: 'POST', page: '//localhost:3000' });
+  assert.equal(matchesRule(localRule, request(LOCAL_PAGE)), true);
+  assert.equal(matchesRule(localRule, request(TEST_PAGE)), false);
+
+  const regexRule = normalizeRule({ id: 'env-any-swimlane', endpoint: '/sdt/aventador/event/query', method: 'POST', page: '//selftest-[^/]*-sl-', pageMatchType: 'regex' });
+  assert.equal(matchesRule(regexRule, request(SWIMLANE_PAGE)), true, 'regex catches any swimlane generation');
+  assert.equal(matchesRule(regexRule, request(TEST_PAGE)), false);
+
+  const scoped = normalizeRule({ id: 'env-closed', endpoint: '/sdt/aventador/event/query', method: 'POST', page: '//qnh.shangou.test.' });
+  assert.equal(matchesRule(scoped, { url: '/sdt/aventador/event/query', method: 'POST' }), false, 'scoped rule fails closed when the page is unknown');
+
+  const unscoped = normalizeRule({ id: 'env-open', endpoint: '/sdt/aventador/event/query', method: 'POST' });
+  assert.equal(matchesRule(unscoped, request(PROD_PAGE)), true, 'no page scope keeps the legacy match-everywhere behavior');
+  assert.equal(unscoped.page, '');
+});
+
+test('hits keep the page URL that triggered them', () => {
+  let state = createState();
+  state = applyStateCommand(state, { name: 'apply', payload: { rule: { id: 'orders', endpoint: '/orders' } } }).state;
+  const recorded = recordHit(state, { ruleId: 'orders', endpoint: '/orders', url: '/orders', scenarioId: 'default', status: 200, pageUrl: TEST_PAGE });
+  assert.equal(recorded.hit.pageUrl, TEST_PAGE);
+  assert.equal(recorded.state.logs[0].pageUrl, TEST_PAGE);
+});
+
 test('switches one active scenario and records bounded hit data', () => {
   let state = createState();
   state = applyStateCommand(state, { name: 'apply', payload: { rule: {
@@ -129,8 +175,7 @@ test('WebSocket keepalive uses one sub-30-second interval and cleans it on stop'
   assert.equal(keepalive.active, false);
 });
 
-test('fetch interception uses Request.method and returns status, headers, and raw body', async () => {
-  let nativeCalls = 0;
+test('fetch interception uses Request.method and returns status, headers, and raw body', async () => {  let nativeCalls = 0;
   const state = {
     globalEnabled: true,
     rules: [normalizeRule({ id: 'fetch', endpoint: '/resource', method: 'POST', scenarios: [{ id: 'raw', status: 201, headers: { 'x-mock': 'yes' }, body: '' }] })],
@@ -150,6 +195,27 @@ test('fetch interception uses Request.method and returns status, headers, and ra
   state.globalEnabled = false;
   await target.fetch('https://example.test/resource');
   assert.equal(nativeCalls, 1);
+  restore();
+});
+
+test('fetch interceptor reads the page URL live and stamps it on the hit', async () => {
+  const state = {
+    globalEnabled: true,
+    rules: [normalizeRule({ id: 'scoped', endpoint: '/resource', method: 'GET', page: '//qnh.shangou.test.' })],
+  };
+  const target = {
+    Response,
+    location: { href: TEST_PAGE },
+    fetch() { return Promise.resolve(new Response('native')); },
+  };
+  const hits = [];
+  const restore = installFetchInterceptor(target, () => state, (hit) => hits.push(hit));
+  await target.fetch('https://example.test/resource');
+  assert.equal(hits.length, 1, 'scoped rule fires on its own environment');
+  assert.equal(hits[0].pageUrl, TEST_PAGE);
+  target.location.href = PROD_PAGE;
+  await target.fetch('https://example.test/resource');
+  assert.equal(hits.length, 1, 'SPA navigation to another environment stops the mock');
   restore();
 });
 

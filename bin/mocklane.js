@@ -26,7 +26,7 @@ function help() {
         daemon: 'daemon [--background] [--port 17321] [--host 127.0.0.1]',
         status: 'status',
         list: 'list',
-        apply: 'apply --json <rule-json> | apply <rule-json> [--file path] (supports bodyFile in rule/scenarios)',
+        apply: 'apply --json <rule-json> | apply <rule-json> [--file path] (supports bodyFile and "env" presets via envs.json / --envs)',
         scenarios: 'scenarios <rule-id>',
         switch: 'switch <rule-id> <scenario-id>',
         enable: 'enable <rule-id>',
@@ -34,11 +34,11 @@ function help() {
         remove: 'remove <rule-id>',
         global: 'global on|off',
         logs: 'logs [--limit N]',
-        match: 'match --url <url> [--method GET]',
+        match: 'match --url <url> [--method GET] [--page-url <url>]',
         request: 'request --url <url> [--method GET] [--headers JSON] [--body text] [--timeout ms] [--native] [--tab-id ID]',
-        wait: 'wait [--rule <rule-id>] [--scenario <scenario-id>] [--timeout ms] (blocks until a matching hit)',
-        journey: 'journey --file <journey.json> (runs switch/apply/enable/disable/global/wait steps, one JSON line each)',
-        report: 'report (session summary: per-rule hit counts, never-hit rules, gate state)',
+        wait: 'wait [--rule <rule-id>] [--scenario <scenario-id>] [--page <substring>] [--timeout ms] (blocks until a matching hit)',
+        journey: 'journey --file <journey.json> [--envs <envs.json>] (runs switch/apply/enable/disable/global/wait steps, one JSON line each)',
+        report: 'report (session summary: per-rule hit counts, per-environment breakdown, gate state)',
       },
     },
   });
@@ -54,7 +54,7 @@ function flag(args, name) {
 }
 
 function positional(args) {
-  const valueOptions = new Set(['--port', '--host', '--file', '--json', '--rule', '--scenario', '--limit', '--url', '--method', '--value', '--headers', '--body', '--timeout', '--tab-id']);
+  const valueOptions = new Set(['--port', '--host', '--file', '--json', '--rule', '--scenario', '--limit', '--url', '--method', '--value', '--headers', '--body', '--timeout', '--tab-id', '--envs', '--page', '--page-url']);
   return args.filter((value, index) => !value.startsWith('-') && !valueOptions.has(args[index - 1]));
 }
 
@@ -85,16 +85,44 @@ async function hydrateBodyFile(source, baseDirectory) {
   return output;
 }
 
+// Named environments are a CLI-side preset layer: the extension only ever
+// sees resolved `page` patterns, so IndexedDB stays the single source of
+// truth and no company-specific hosts leak into the product.
+async function resolveEnvScope(rule, envsFile) {
+  if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return rule;
+  if (rule.env === undefined || rule.env === null) return rule;
+  if (rule.page !== undefined && String(rule.page).trim() !== '') {
+    throw Object.assign(new Error('env cannot be combined with an inline page pattern'), { code: 'ambiguous_page_scope' });
+  }
+  let presets;
+  try {
+    presets = JSON.parse(await fs.readFile(envsFile, 'utf8'));
+  } catch (error) {
+    throw Object.assign(new Error(`env presets not readable at ${envsFile}: ${error.message}`), { code: 'missing_envs_file' });
+  }
+  const preset = presets?.[String(rule.env)];
+  if (!preset || typeof preset !== 'object' || !preset.page) {
+    const available = Object.keys(presets || {}).join(', ') || 'none';
+    throw Object.assign(new Error(`unknown env "${rule.env}" (available: ${available})`), { code: 'unknown_env' });
+  }
+  const { env, ...rest } = rule;
+  return { ...rest, page: String(preset.page), ...(preset.matchType ? { pageMatchType: String(preset.matchType) } : {}) };
+}
+
+function envsFileFor(args) {
+  return path.resolve(option(args, '--envs', 'envs.json'));
+}
+
 async function parseRule(args) {
   const file = option(args, '--file');
   const raw = option(args, '--json') || args.find((value) => value.startsWith('{'));
   if (file) {
     const absoluteFile = path.resolve(file);
     const rule = JSON.parse(await fs.readFile(absoluteFile, 'utf8'));
-    return hydrateBodyFile(rule, path.dirname(absoluteFile));
+    return resolveEnvScope(await hydrateBodyFile(rule, path.dirname(absoluteFile)), envsFileFor(args));
   }
   if (!raw) throw Object.assign(new Error('apply requires --json or a JSON rule argument'), { code: 'missing_rule' });
-  return hydrateBodyFile(JSON.parse(raw), process.cwd());
+  return resolveEnvScope(await hydrateBodyFile(JSON.parse(raw), process.cwd()), envsFileFor(args));
 }
 
 function commandFromArgs(command, args) {
@@ -109,7 +137,7 @@ function commandFromArgs(command, args) {
     return { name: command, payload: { value, enabled: ['on', 'enable', 'enabled', 'true', '1'].includes(String(value).toLowerCase()) } };
   }
   if (command === 'logs') return { name: command, payload: { limit: Number(option(args, '--limit', 50)) || 50 } };
-  if (command === 'match') return { name: command, payload: { url: option(args, '--url', values[0] || ''), method: option(args, '--method', 'GET') } };
+  if (command === 'match') return { name: command, payload: { url: option(args, '--url', values[0] || ''), method: option(args, '--method', 'GET'), pageUrl: option(args, '--page-url', '') } };
   if (command === 'request') {
     const headersText = option(args, '--headers');
     let headers = {};
@@ -161,7 +189,7 @@ function parseWaitTimeout(value) {
 // Subscribes to the daemon event stream as role `cli` and blocks until a hit
 // matches the filters. Only future hits count — this is an assertion primitive:
 // start the wait, then drive the page. Past hits are `logs`' job.
-function waitForHit({ ruleId, scenarioId, timeout }, port) {
+function waitForHit({ ruleId, scenarioId, page, timeout }, port) {
   return new Promise((resolve) => {
     let settled = false;
     let socket;
@@ -198,6 +226,7 @@ function waitForHit({ ruleId, scenarioId, timeout }, port) {
       const hit = message.hit;
       if (ruleId && hit.ruleId !== ruleId) return;
       if (scenarioId && hit.scenarioId !== scenarioId) return;
+      if (page && !String(hit.pageUrl || '').includes(page)) return;
       finish({ ok: true, data: { hit } });
     });
   });
@@ -228,7 +257,7 @@ function normalizeJourney(source) {
 
 // Each step maps onto the same command path its standalone CLI command uses;
 // journey is orchestration, not a second implementation.
-async function runJourneyStep(step, baseDirectory, port) {
+async function runJourneyStep(step, baseDirectory, port, envsFile) {
   const action = Object.keys(step)[0];
   const config = step[action];
   if (action === 'switch') {
@@ -254,13 +283,14 @@ async function runJourneyStep(step, baseDirectory, port) {
     } else {
       throw journeyError('apply step requires { file } or { rule }');
     }
-    return rpc({ name: 'apply', payload: { rule } }, port);
+    return rpc({ name: 'apply', payload: { rule: await resolveEnvScope(rule, envsFile) } }, port);
   }
   // wait
   const waitConfig = config && typeof config === 'object' ? config : {};
   return waitForHit({
     ruleId: waitConfig.rule ? String(waitConfig.rule) : undefined,
     scenarioId: waitConfig.scenario ? String(waitConfig.scenario) : undefined,
+    page: waitConfig.page ? String(waitConfig.page) : undefined,
     timeout: parseWaitTimeout(waitConfig.timeout === undefined ? undefined : String(waitConfig.timeout)),
   }, port);
 }
@@ -279,12 +309,13 @@ async function runJourney(args, port) {
   }
   const journey = normalizeJourney(parsed);
   const baseDirectory = path.dirname(absoluteFile);
+  const envsFile = envsFileFor(args);
   for (let index = 0; index < journey.steps.length; index += 1) {
     const step = journey.steps[index];
     const action = Object.keys(step)[0];
     let result;
     try {
-      result = await runJourneyStep(step, baseDirectory, port);
+      result = await runJourneyStep(step, baseDirectory, port, envsFile);
     } catch (error) {
       result = cliFailure(error.code || 'journey_step_error', error.message || String(error));
     }
@@ -297,11 +328,31 @@ async function runJourney(args, port) {
   print({ ok: true, journey: journey.name, steps: journey.steps.length });
 }
 
+// Environment comparison: group hits by the host of the page that triggered
+// them. "Did the same mock fire in the swimlane and in test?" in one glance.
+function summarizeByEnv(logs) {
+  const groups = new Map();
+  for (const hit of Array.isArray(logs) ? logs : []) {
+    let host = '(unknown page)';
+    try {
+      host = new URL(String(hit.pageUrl || '')).host || '(unknown page)';
+    } catch { /* keep fallback */ }
+    groups.set(host, (groups.get(host) || 0) + 1);
+  }
+  return [...groups.entries()]
+    .map(([host, hits]) => ({ host, hits }))
+    .sort((a, b) => (b.hits - a.hits)
+      || (a.host === '(unknown page)') - (b.host === '(unknown page)')
+      || a.host.localeCompare(b.host));
+}
+
 async function runReport(port) {
   const status = await rpc({ name: 'status' }, port);
   if (!status.ok) return status;
   const list = await rpc({ name: 'list' }, port);
   if (!list.ok) return list;
+  const logs = await rpc({ name: 'logs', payload: { limit: 500 } }, port);
+  if (!logs.ok) return logs;
   const rules = Array.isArray(list.data) ? list.data : [];
   const totalHits = rules.reduce((sum, rule) => sum + (rule.hitCount || 0), 0);
   return {
@@ -309,11 +360,13 @@ async function runReport(port) {
     data: {
       globalEnabled: status.data?.globalEnabled === true,
       totalHits,
+      envs: summarizeByEnv(logs.data),
       rules: rules.map((rule) => ({
         id: rule.id,
         endpoint: rule.endpoint,
         enabled: rule.enabled,
         activeScenarioId: rule.activeScenarioId,
+        ...(rule.page ? { page: rule.page } : {}),
         hitCount: rule.hitCount || 0,
         lastHitAt: rule.lastHitAt || '',
       })),
@@ -384,6 +437,7 @@ async function main() {
     const result = await waitForHit({
       ruleId: option(argv, '--rule'),
       scenarioId: option(argv, '--scenario'),
+      page: option(argv, '--page'),
       timeout: parseWaitTimeout(option(argv, '--timeout')),
     }, port);
     print(result);
@@ -403,7 +457,7 @@ async function main() {
   print(result);
 }
 
-export { commandFromArgs, hydrateBodyFile, normalizeJourney, parsePort, parseRule, parseWaitTimeout, waitForHit };
+export { commandFromArgs, hydrateBodyFile, normalizeJourney, parsePort, parseRule, parseWaitTimeout, resolveEnvScope, summarizeByEnv, waitForHit };
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   main().catch((error) => {

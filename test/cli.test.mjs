@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { WebSocket } from 'ws';
-import { normalizeJourney, parseWaitTimeout, waitForHit } from '../bin/mocklane.js';
+import { normalizeJourney, parseWaitTimeout, resolveEnvScope, summarizeByEnv, waitForHit } from '../bin/mocklane.js';
 import { startDaemon } from '../src/daemon/server.mjs';
 
 function openSocket(url, origin) {
@@ -107,4 +110,72 @@ test('waitForHit reports extension disconnect mid-wait', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'extension_disconnected');
   await daemon.close();
+});
+
+test('waitForHit page filter only resolves hits from the right environment', async () => {
+  const daemon = await startDaemon({ port: 0 });
+  const port = daemon.address.port;
+  const extension = await openSocket(`ws://127.0.0.1:${port}/ws`, 'chrome-extension://abcdefghijklmnop');
+  extension.send(JSON.stringify({ kind: 'hello', role: 'extension' }));
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  const pending = waitForHit({ ruleId: 'user-list', page: '//qnh.shangou.test.', timeout: 5000 }, port);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  const send = (pageUrl) => extension.send(JSON.stringify({
+    kind: 'event', event: 'hit',
+    hit: { id: `h-${pageUrl.length}`, ruleId: 'user-list', scenarioId: 'ok', url: 'https://x.test/api', method: 'GET', status: 200, pageUrl, timestamp: '2026-09-02T00:00:00.000Z' },
+  }));
+  send('https://qnh.meituan.com/home.html'); // production — must be ignored
+  send('https://selftest-260821-104730-989-sl-qnh.shangou.test.meituan.com/home.html'); // swimlane — must be ignored
+  send('https://qnh.shangou.test.meituan.com/home.html'); // test env — resolves
+  const result = await pending;
+  assert.equal(result.ok, true);
+  assert.equal(result.data.hit.pageUrl, 'https://qnh.shangou.test.meituan.com/home.html');
+  extension.close();
+  await daemon.close();
+});
+
+test('resolveEnvScope maps named envs to page patterns', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mocklane-envs-'));
+  const envsFile = path.join(dir, 'envs.json');
+  await fs.writeFile(envsFile, JSON.stringify({
+    swimlane: { page: '//selftest-260821-104730-989-sl-qnh.' },
+    st: { page: '//qnh.shangou.st.', matchType: 'contains' },
+  }));
+  try {
+    const resolved = await resolveEnvScope({ id: 'r1', endpoint: '/api', env: 'swimlane' }, envsFile);
+    assert.equal(resolved.page, '//selftest-260821-104730-989-sl-qnh.');
+    assert.equal(resolved.env, undefined, 'env key is consumed at apply time');
+    const untouched = await resolveEnvScope({ id: 'r2', endpoint: '/api' }, envsFile);
+    assert.equal(untouched.page, undefined, 'rules without env pass through');
+    await assert.rejects(
+      () => resolveEnvScope({ id: 'r3', endpoint: '/api', env: 'nope' }, envsFile),
+      (error) => error.code === 'unknown_env' && /swimlane/.test(error.message),
+    );
+    await assert.rejects(
+      () => resolveEnvScope({ id: 'r4', endpoint: '/api', env: 'st', page: '//x' }, envsFile),
+      (error) => error.code === 'ambiguous_page_scope',
+    );
+    await assert.rejects(
+      () => resolveEnvScope({ id: 'r5', endpoint: '/api', env: 'st' }, path.join(dir, 'missing.json')),
+      (error) => error.code === 'missing_envs_file',
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('summarizeByEnv groups hits by page host for environment comparison', () => {
+  const envs = summarizeByEnv([
+    { pageUrl: 'https://qnh.shangou.test.meituan.com/home.html#/a' },
+    { pageUrl: 'https://qnh.shangou.test.meituan.com/home.html#/b' },
+    { pageUrl: 'https://selftest-260821-104730-989-sl-qnh.shangou.test.meituan.com/home.html' },
+    { pageUrl: '' },
+  ]);
+  assert.deepEqual(envs, [
+    { host: 'qnh.shangou.test.meituan.com', hits: 2 },
+    { host: 'selftest-260821-104730-989-sl-qnh.shangou.test.meituan.com', hits: 1 },
+    { host: '(unknown page)', hits: 1 },
+  ]);
+  assert.deepEqual(summarizeByEnv(undefined), []);
 });

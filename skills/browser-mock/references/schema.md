@@ -8,6 +8,9 @@
   "endpoint": "string, required",
   "matchType": "contains | regex (default contains)",
   "method": "HTTP method (default GET; * matches every method)",
+  "page": "optional page scope; rule fires only when location.href matches (empty = every page)",
+  "pageMatchType": "contains | regex (default contains)",
+  "env": "CLI-only preset name resolved from envs.json / --envs into page+pageMatchType at apply time",
   "enabled": "boolean (default true)",
   "scenarios": [
     {
@@ -29,6 +32,26 @@
 
 Mocklane returns a response before the native network call, but does not rewrite the intercepted request. Keep the rule endpoint and method identical to the real API. UI preview flags belong outside the business payload, and response/mock metadata belongs in the rule or a referenced payload file.
 
+## Page scope (environment isolation)
+
+`page` scopes a rule to the pages it may intercept: the interceptor matches it against the page's own `location.href`, never the request URL — the page IS the environment. Matching is **fail-closed**: a scoped rule never fires when the page URL is unknown. Rules without `page` behave as before (every page).
+
+Use `//`-anchored patterns to target one host family: `//qnh.shangou.test.` matches the test host but NOT a swimlane host like `selftest-…-sl-qnh.shangou.test.meituan.com`; `//qnh.shangou.st.` matches ST but NOT test (a bare `st.` would also match `te[st.]`). Full `href` matching also covers path and query (e.g. `bizMode=convenience_store`).
+
+Instead of repeating raw patterns, the CLI resolves named presets from `envs.json` in the working directory (or `--envs <path>`):
+
+```json
+{
+  "local":    { "page": "//localhost:3000" },
+  "swimlane": { "page": "//selftest-260821-104730-989-sl-qnh." },
+  "test":     { "page": "//qnh.shangou.test." },
+  "st":       { "page": "//qnh.shangou.st." },
+  "prod":     { "page": "//qnh.meituan.com/" }
+}
+```
+
+A rule file then just says `"env": "swimlane"` and the CLI substitutes `page` at `apply` time (also inside journey apply steps). Adding an environment = adding one key; switching a rule's environment = re-applying with another name. `env` combined with an inline `page` is rejected (`ambiguous_page_scope`); unknown names fail with `unknown_env`. The extension only ever stores the resolved pattern — presets never leave the CLI.
+
 ## State owned by the extension
 
 ```json
@@ -45,6 +68,7 @@ Mocklane returns a response before the native network call, but does not rewrite
       "method": "GET",
       "scenarioId": "string",
       "status": 200,
+      "pageUrl": "location.href of the page that triggered the hit (the environment dimension)",
       "timestamp": "ISO-8601 string"
     }
   ]
@@ -67,7 +91,7 @@ The CLI converts positional arguments to these command objects before sending th
 | `enable/disable/remove rule-id` | `{ "name": "enable|disable|remove", "payload": { "ruleId": "rule-id" } }` |
 | `global on\|off` | `{ "name": "global", "payload": { "enabled": true\|false } }` |
 | `logs --limit 20` | `{ "name": "logs", "payload": { "limit": 20 } }` |
-| `match --url URL --method POST` | `{ "name": "match", "payload": { "url": "URL", "method": "POST" } }` |
+| `match --url URL --method POST [--page-url URL]` | `{ "name": "match", "payload": { "url": "URL", "method": "POST", "pageUrl": "URL" } }` |
 | `request --url URL [options]` | `{ "name": "request", "payload": { "url": "URL", "method": "GET", "headers": {}, "timeout": 10000, "native": false, "tabId": 17 } }` |
 
 Successful responses are `{ "ok": true, "data": ... }`. Errors use `{ "ok": false, "error": { "code": "...", "message": "..." } }`.

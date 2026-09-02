@@ -60,6 +60,43 @@ Each step is one action — `apply` (`{"apply":{"file":"rule.json"}}` resolves r
 
 `report` summarizes the session: per-rule `hitCount`/`lastHitAt`, `totalHits`, `neverHit` rule ids (wasted config), and the gate state — read it before tearing down to confirm every configured rule actually fired.
 
+## Environment scopes
+
+The point of a page scope is isolation: a mock for one environment must never touch any other page. Add `page` to a rule and the interceptor fires it only when the page's own `location.href` matches (`contains` by default, `regex` via `pageMatchType`). The page IS the environment — matching is against the page URL, never the request URL, and a scoped rule **fails closed**: it never fires when the page URL is unknown. Rules without `page` match everywhere, exactly as before.
+
+```json
+{ "id": "orders-test", "endpoint": "/sdt/aventador/event/query", "method": "POST", "page": "//qnh.shangou.test.", "body": "{}" }
+```
+
+Anchor patterns with `//` (host start): `//qnh.shangou.test.` hits the test host but NOT a swimlane host like `selftest-…-sl-qnh.shangou.test.meituan.com` (which contains the test host as a substring); `//qnh.shangou.st.` hits ST but NOT test — a bare `st.` would also match `te[st.]`.
+
+### Named environments: envs.json
+
+Repeating raw patterns across rules does not scale. The CLI resolves named presets from `envs.json` in the working directory (or `--envs <path>`) at `apply` time:
+
+```json
+{
+  "local":    { "page": "//localhost:3000" },
+  "swimlane": { "page": "//selftest-260821-104730-989-sl-qnh." },
+  "test":     { "page": "//qnh.shangou.test." },
+  "st":       { "page": "//qnh.shangou.st." },
+  "prod":     { "page": "//qnh.meituan.com/" },
+  "any-swimlane": { "page": "//selftest-[^/]*-sl-", "matchType": "regex" }
+}
+```
+
+A rule then just says `"env": "swimlane"` and the CLI substitutes the pattern:
+
+```bash
+bun run bin/mocklane.js apply --file rule.json            # rule.json contains "env": "test"
+bun run bin/mocklane.js apply --file rule.json --envs ./team/envs.json
+```
+
+- **Extensible**: adding an environment = adding one key to envs.json. Nothing is hardcoded; the extension only ever stores the resolved `page` pattern (presets never leave the CLI).
+- **Switchable**: re-point a rule by re-applying with a different `env` name — no pattern rewriting.
+- **Comparable**: every hit records the page URL that triggered it. `wait --page '//qnh.shangou.test.'` waits only for hits in one environment, and `report` ends with an `envs` breakdown grouping hits by page host, so "did the same mock fire in the swimlane and in test?" is one command.
+- `env` combined with an inline `page` is rejected (`ambiguous_page_scope`); unknown names fail with `unknown_env` listing what's available.
+
 ## Debugging a page request
 
 Use `request` only when a deterministic page-context request is useful for debugging a loaded page:

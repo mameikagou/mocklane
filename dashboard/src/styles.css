@@ -265,6 +265,7 @@
   .endpoint-line code { min-width: 0; color: var(--ink-1); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .endpoint-meta { gap: 7px; margin-top: 9px; color: var(--ink-3); font-size: 11px; min-width: 0; flex-wrap: wrap; }
   .rule-id { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
+  .page-scope { color: var(--tool); font-family: var(--font-mono); overflow-wrap: anywhere; }
   .meta-separator { color: var(--line-strong); }
   .endpoint-controls { gap: 16px; flex-shrink: 0; }
   .scenario-control { gap: 9px; min-width: 0; }

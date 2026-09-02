@@ -107,7 +107,7 @@ export function applyStateCommand(inputState, command = {}) {
     if (name === 'match') {
       return {
         ok: true,
-        data: matchSummary(state.rules, { url: payload.url, method: payload.method }, { globalEnabled: state.globalEnabled }),
+        data: matchSummary(state.rules, { url: payload.url, method: payload.method, pageUrl: payload.pageUrl }, { globalEnabled: state.globalEnabled }),
         state,
       };
     }

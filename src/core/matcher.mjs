@@ -5,6 +5,9 @@ export function normalizeRequest(input = {}) {
   return {
     url: String(source.url ?? ''),
     method: String(source.method || 'GET').toUpperCase(),
+    // The page performing the request (location.href). Rules with a page
+    // scope match against this — the page IS the environment dimension.
+    pageUrl: String(source.pageUrl ?? ''),
   };
 }
 
@@ -20,10 +23,23 @@ function regexFromPattern(pattern) {
   }
 }
 
+function matchesPageScope(rule, pageUrl) {
+  const pattern = String(rule.page || '');
+  if (!pattern) return true;
+  // Fail closed: a scoped rule must never fire where the page is unknown.
+  if (!pageUrl) return false;
+  if (rule.pageMatchType === 'regex') {
+    const expression = regexFromPattern(pattern);
+    return Boolean(expression && expression.test(pageUrl));
+  }
+  return pageUrl.includes(pattern);
+}
+
 export function matchesRule(ruleInput, requestInput) {
   const rule = ruleInput;
   const request = normalizeRequest(requestInput);
   if (!rule || rule.enabled === false) return false;
+  if (!matchesPageScope(rule, request.pageUrl)) return false;
   if (rule.method !== '*' && String(rule.method || 'GET').toUpperCase() !== request.method) return false;
   if (rule.matchType === 'regex') {
     const expression = regexFromPattern(rule.endpoint);

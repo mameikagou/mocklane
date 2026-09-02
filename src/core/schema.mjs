@@ -99,6 +99,16 @@ export function normalizeRule(input = {}, options = {}) {
     throw error;
   }
 
+  // Optional page scope: the rule only fires on pages whose location.href
+  // matches. Empty means "every page" (the pre-scope behavior).
+  const page = String(source.page ?? '').trim();
+  const pageMatchType = String(source.pageMatchType ?? 'contains').toLowerCase();
+  if (!MATCH_TYPES.has(pageMatchType)) {
+    const error = new TypeError(`pageMatchType must be contains or regex (received ${pageMatchType})`);
+    error.code = 'invalid_match_type';
+    throw error;
+  }
+
   const method = String(source.method ?? 'GET').trim().toUpperCase() || 'GET';
   if (!HTTP_METHOD.test(method) && method !== '*') {
     const error = new TypeError(`invalid HTTP method: ${method}`);
@@ -127,6 +137,8 @@ export function normalizeRule(input = {}, options = {}) {
   return {
     id: String(source.id || makeId('rule')),
     endpoint,
+    page,
+    pageMatchType,
     matchType,
     method,
     enabled: source.enabled !== false,
@@ -164,6 +176,8 @@ export function normalizeHit(input = {}) {
     method: String(source.method || 'GET').toUpperCase(),
     scenarioId: String(source.scenarioId || ''),
     status: normalizeStatus(source.status, 200),
+    // The page that triggered the hit — the environment dimension.
+    pageUrl: String(source.pageUrl || ''),
     timestamp: String(source.timestamp || nowIso()),
   };
 }

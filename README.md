@@ -99,9 +99,9 @@ A real response payload lives in its own file: `bodyFile` is resolved relative t
 | `logs [--limit N]` | Recent hits: time, request, scenario, status |
 | `match --url --method` | Dry-run the matcher against a URL |
 | `request --url [--tab-id] [--native]` | Ask a page tab to fetch — see below |
-| `wait [--rule] [--scenario] [--timeout]` | Block until a matching hit arrives — assertion without polling |
-| `journey --file <journey.json>` | Run a scenario chain, one JSON line per step |
-| `report` | Session summary: per-rule hit counts, never-hit rules, gate state |
+| `wait [--rule] [--scenario] [--page] [--timeout]` | Block until a matching hit arrives — assertion without polling |
+| `journey --file <journey.json> [--envs <envs.json>]` | Run a scenario chain, one JSON line per step |
+| `report` | Session summary: per-rule hit counts, per-environment breakdown, never-hit rules, gate state |
 
 `request` deserves a note: it asks **one** browser tab (active by default, or `--tab-id`) to perform a real page `fetch`, so an enabled rule can answer it and produce a normal hit log. `--native` bypasses the Mocklane wrapper and calls the original page fetch. Results are stable JSON with `status`, `headers`, raw `body`; network/CORS failures, a missing bridge, and timeouts return stable error codes; bodies cap at 2 MiB. It's a debugging aid — it deliberately refuses browser-internal and Mocklane dashboard tabs, and it cannot mutate a page's React state.
 
@@ -129,6 +129,10 @@ mocklane wait --rule checkout --scenario timeout --timeout 10000
 ```
 
 `mocklane report` reads the persistent per-rule counters and answers the teardown question — did everything I configured actually fire? Per-rule `hitCount`/`lastHitAt`, `totalHits`, `neverHit` ids (wasted config), and gate state in one object.
+
+### Environment scopes
+
+A rule with `"page": "//staging.example."` only fires on pages whose own URL matches — the mock cannot leak onto other tabs or environments, and matching fails closed when the page is unknown. Anchor with `//` so `//qnh.shangou.st.` doesn't accidentally match `te[st.]` (or a swimlane host containing the test host as a substring). Name your environments once in `envs.json` (`{"test": {"page": "//qnh.shangou.test."}}`), then write `"env": "test"` in rule files — extend by adding keys, switch by re-applying with another name, compare via `wait --page` and `report`'s per-environment hit breakdown.
 
 ## Dashboard
 
