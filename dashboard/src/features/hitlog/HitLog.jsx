@@ -1,4 +1,4 @@
-import { Badge } from '../ui/Badge.jsx';
+import { Badge } from '../../ui/Badge.jsx';
 
 function timeLabel(timestamp) {
   const date = new Date(timestamp);
@@ -6,6 +6,5 @@ function timeLabel(timestamp) {
 }
 
 export function HitLog({ logs }) {
-  if (!logs.length) return <div className="log-empty"><div className="empty-icon"><span className="empty-bars" /></div><strong>No traffic captured</strong><span>Matched requests will appear here in real time.</span></div>;
   return <div className="log-table-wrap"><table className="log-table"><thead><tr><th>Time</th><th>Request</th><th>Scenario</th><th>Status</th></tr></thead><tbody>{logs.map((hit) => <tr key={hit.id}><td className="log-time">{timeLabel(hit.timestamp)}</td><td><div className="log-request"><Badge tone="muted">{hit.method}</Badge><span title={hit.url}>{hit.url}</span></div><div className="log-rule">{hit.ruleId}</div></td><td><span className="scenario-name">{hit.scenarioId}</span></td><td><Badge tone={Number(hit.status) >= 400 ? 'danger' : 'success'}>{hit.status}</Badge></td></tr>)}</tbody></table></div>;
 }
