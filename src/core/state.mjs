@@ -122,6 +122,13 @@ export function recordHit(inputState, hitInput) {
   const state = normalizeState(inputState);
   const hit = normalizeHit({ ...hitInput, id: hitInput?.id || makeId('hit') });
   state.logs = [...state.logs, hit].slice(-MAX_LOGS);
+  // Per-rule counters power the dashboard "now serving" view. They live in
+  // the same state write as the log append, so they can never drift apart.
+  const rule = hit.ruleId ? state.rules.find((candidate) => candidate.id === hit.ruleId) : undefined;
+  if (rule) {
+    rule.hitCount += 1;
+    rule.lastHitAt = hit.timestamp;
+  }
   return { state, hit };
 }
 

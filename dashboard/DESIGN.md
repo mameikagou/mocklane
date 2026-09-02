@@ -128,10 +128,11 @@ dashboard/src/
   ui/                  无状态原语（Button Badge Switch Select Icon EmptyState）
   features/            功能域，一个域一个目录
     connection/        daemon/extension 连接状态
-    hero/              产品定位面板
+    system/            系统状态位（gate 大字状态 + 桥/规则计数）
     gate/              全局 mock 开关
     rules/             endpoint 列表（EndpointsPanel + EndpointRow）
-    hitlog/            命中日志（HitLogPanel + HitLog 表格）
+    now-serving/       每条规则当前场景 + 命中计数（NowServingPanel）
+    hitlog/            命中日志（HitLogDrawer 抽屉 + HitLog 表格，默认收起）
 ```
 
 约束（新代码必须遵守）：

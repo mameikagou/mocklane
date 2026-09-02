@@ -19,7 +19,9 @@
       "bodyFile": "CLI-only alternative to body; relative to the rule file"
     }
   ],
-  "activeScenarioId": "must point at one scenario"
+  "activeScenarioId": "must point at one scenario",
+  "hitCount": "integer, read-only; incremented by the extension on every matching hit",
+  "lastHitAt": "ISO-8601 string, read-only; timestamp of the most recent hit (empty until first hit)"
 }
 ```
 

@@ -134,6 +134,9 @@ export function normalizeRule(input = {}, options = {}) {
     activeScenarioId,
     createdAt: String(source.createdAt || now),
     updatedAt: String(source.updatedAt || now),
+    // Read-only counters maintained by recordHit; client input is ignored.
+    hitCount: Number.isInteger(Number(source.hitCount)) && Number(source.hitCount) > 0 ? Number(source.hitCount) : 0,
+    lastHitAt: String(source.lastHitAt || ''),
   };
 }
 

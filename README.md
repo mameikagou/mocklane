@@ -104,7 +104,7 @@ A real response payload lives in its own file: `bodyFile` is resolved relative t
 
 ## Dashboard
 
-<http://127.0.0.1:17321/> — a real-time arena console over the live socket: connection state, the global gate, per-rule scenario switching, and a streaming hit log. Dark-first, amber-on-deep-space, tabular numerals everywhere. Read-only with respect to rules: the CLI stays the write path.
+<http://127.0.0.1:17321/> — a workbench status board over the live socket: gate state, bridge health, and a **now serving** view of which scenario each rule is currently answering with (per-rule hit counters included). Per-rule scenario switching stays one click away; the full hit log is one drawer away. Dark-first, amber-on-deep-space, tabular numerals everywhere. Read-only with respect to rules: the CLI stays the write path — the log stream itself is the agent's telemetry, consumed via `mocklane logs`.
 
 ## Architecture
 

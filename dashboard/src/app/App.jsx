@@ -4,10 +4,11 @@ import { useEffect } from 'react';
 import { initMocklane, useMocklane } from '../lib/store.js';
 import { Topbar } from './Topbar.jsx';
 import { Footer } from './Footer.jsx';
-import { HeroPanel } from '../features/hero/HeroPanel.jsx';
+import { SystemPanel } from '../features/system/SystemPanel.jsx';
 import { GlobalGatePanel } from '../features/gate/GlobalGatePanel.jsx';
 import { EndpointsPanel } from '../features/rules/EndpointsPanel.jsx';
-import { HitLogPanel } from '../features/hitlog/HitLogPanel.jsx';
+import { NowServingPanel } from '../features/now-serving/NowServingPanel.jsx';
+import { HitLogDrawer } from '../features/hitlog/HitLogDrawer.jsx';
 
 export function App() {
   useEffect(() => initMocklane(), []);
@@ -19,7 +20,7 @@ export function App() {
 
     <main className="workspace">
       <section className="overview-grid">
-        <HeroPanel />
+        <SystemPanel />
         <GlobalGatePanel />
       </section>
 
@@ -27,7 +28,7 @@ export function App() {
 
       <section className="content-grid">
         <EndpointsPanel />
-        <HitLogPanel />
+        <NowServingPanel><HitLogDrawer /></NowServingPanel>
       </section>
     </main>
     <Footer />
