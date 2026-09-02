@@ -266,7 +266,7 @@
   .endpoint-meta { gap: 7px; margin-top: 9px; color: var(--ink-3); font-size: 11px; min-width: 0; flex-wrap: wrap; }
   .rule-id { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
   .page-scope { color: var(--tool); font-family: var(--font-mono); overflow-wrap: anywhere; }
-  .live-chip { color: var(--ok); font-family: var(--font-mono); }
+  .live-chip { color: var(--ok); font-family: var(--font-mono); white-space: nowrap; }
   .live-hits { margin-top: 10px; border: 1px solid var(--line-subtle); border-radius: 2px; background: var(--surface-1); padding: 8px 12px; }
   .live-hits-head { color: var(--ok); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .12em; font-size: 9px; margin-bottom: 6px; }
   .live-hit-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; font-size: 11px; }
