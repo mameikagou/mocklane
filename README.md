@@ -7,9 +7,9 @@ The extension owns the data in IndexedDB. The localhost daemon only relays WebSo
 ## Quick start
 
 ```bash
-npm install
-npm run build
-node bin/mocklane.js daemon --background
+bun install --frozen-lockfile
+bun run build
+bun run bin/mocklane.js daemon --background
 ```
 
 Load `dist/extension` in `chrome://extensions` with **Developer mode → Load unpacked**. Open the dashboard at <http://127.0.0.1:17321/>. The default global switch is off, so a rule never changes traffic until it is explicitly enabled.
@@ -17,10 +17,10 @@ Load `dist/extension` in `chrome://extensions` with **Developer mode → Load un
 The background form prints a stable JSON object containing the daemon PID and address. Stop it with `kill <pid>` when finished. The extension intentionally connects only to `127.0.0.1:17321`; `--port` is for dashboard/CLI debugging and does not move the extension connection:
 
 ```bash
-node bin/mocklane.js daemon --port 17322
+bun run bin/mocklane.js daemon --port 17322
 ```
 
-Use `node bin/mocklane.js daemon` when running in the foreground. Keep the default `17321` for a connected extension.
+Use `bun run bin/mocklane.js daemon` when running in the foreground. Keep the default `17321` for a connected extension.
 
 ## CLI examples
 
@@ -28,7 +28,7 @@ Every command prints one JSON object on one line. The examples below assume the 
 
 ```bash
 # Create one endpoint with two response scenarios.
-node bin/mocklane.js apply --json '{
+bun run bin/mocklane.js apply --json '{
   "id": "user-list",
   "endpoint": "/api/users",
   "matchType": "contains",
@@ -40,22 +40,22 @@ node bin/mocklane.js apply --json '{
   "activeScenarioId": "ok"
 }'
 
-node bin/mocklane.js global on
-node bin/mocklane.js list
-node bin/mocklane.js scenarios user-list
-node bin/mocklane.js switch user-list empty
-node bin/mocklane.js logs --limit 20
-node bin/mocklane.js match --url 'https://example.test/api/users' --method GET
+bun run bin/mocklane.js global on
+bun run bin/mocklane.js list
+bun run bin/mocklane.js scenarios user-list
+bun run bin/mocklane.js switch user-list empty
+bun run bin/mocklane.js logs --limit 20
+bun run bin/mocklane.js match --url 'https://example.test/api/users' --method GET
 # Ask the active business tab to make a request through its page fetch.
-node bin/mocklane.js request --url 'https://example.test/api/users' --method GET
+bun run bin/mocklane.js request --url 'https://example.test/api/users' --method GET
 # --native calls the original page fetch saved before Mocklane was installed.
-node bin/mocklane.js request --url 'https://example.test/api/checkout' --method POST \
+bun run bin/mocklane.js request --url 'https://example.test/api/checkout' --method POST \
   --headers '{"content-type":"application/json"}' --body '{"dryRun":true}' --timeout 5000 --native
-node bin/mocklane.js disable user-list
-node bin/mocklane.js remove user-list
+bun run bin/mocklane.js disable user-list
+bun run bin/mocklane.js remove user-list
 ```
 
-Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, `enable`, `disable`, `remove`, `global`, `logs`, `match`, and `request`. Run `node bin/mocklane.js --help` for the complete argument shape.
+Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, `enable`, `disable`, `remove`, `global`, `logs`, `match`, and `request`. Run `bun run bin/mocklane.js --help` for the complete argument shape.
 
 `request` targets exactly one tab: the active tab by default, or the tab named by `--tab-id`. It refuses browser-internal, extension, and Mocklane dashboard tabs. The page's own `window.fetch` is used by default, so an enabled matching rule can answer it and create a normal hit log; `--native` bypasses the Mocklane wrapper. Results are stable JSON with `status`, `headers`, and raw `body`. Network/CORS failures, an unavailable bridge, and timeouts return stable error codes, and response bodies are capped at 2 MiB. This command is a debugging aid; it does not replace the application's own business call or make React state change by itself.
 
@@ -64,9 +64,9 @@ Useful commands are `daemon`, `status`, `list`, `apply`, `scenarios`, `switch`, 
 If an application hides a feature before making any request, `request` cannot update that application's React state. A runtime-only switch may bypass that UI gate, but it must not rewrite the business URL, method, or request payload. Let the application's normal request run unchanged and configure Mocklane against the real endpoint. The store-launch AI integration uses `/sdt/aventador/event/query` and `/sdt/aventador/event/execute` in both native and mocked modes:
 
 ```bash
-node bin/mocklane.js apply --file examples/ai-store-launch-query.json
-node bin/mocklane.js apply --file examples/ai-store-launch-execute.json
-node bin/mocklane.js global on
+bun run bin/mocklane.js apply --file examples/ai-store-launch-query.json
+bun run bin/mocklane.js apply --file examples/ai-store-launch-execute.json
+bun run bin/mocklane.js global on
 ```
 
 Open the application with `?mocklaneAi=1` before its hash route, for example `home.html?mocklaneAi=1#/path`. The switch affects preview visibility only. The two rules answer the unchanged `/sdt` requests, whose business payload still contains only `appNo`, `tenantId`, `client`, and the normal execute fields.
@@ -117,14 +117,14 @@ The MAIN-world script is intentionally tiny and does not use extension APIs. It 
 ## Development and verification
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run smoke
+bun run lint
+bun run typecheck
+bun run test
+bun run build
+bun run smoke
 ```
 
-`npm run build` emits a loadable `dist/extension` directory, a bundled React/Rspack dashboard in `dist/dashboard`, and `dist/mocklane-extension.zip`. No `node_modules` directory is part of the extension artifact.
+`bun run build` emits a loadable `dist/extension` directory, a bundled React/Rspack dashboard in `dist/dashboard`, and `dist/mocklane-extension.zip`. No `node_modules` directory is part of the extension artifact.
 
 This repository is distributed under the MIT License; see [`LICENSE`](LICENSE).
 

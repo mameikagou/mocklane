@@ -12,17 +12,17 @@ Mocklane is a local Chrome MV3 extension plus a localhost relay. The extension s
 From the Mocklane project:
 
 ```bash
-npm install
-npm run build
-node bin/mocklane.js daemon --background
+bun install --frozen-lockfile
+bun run build
+bun run bin/mocklane.js daemon --background
 ```
 
 The command returns the daemon PID and address as JSON. Load `dist/extension` as an unpacked extension in Chrome. The dashboard is at `http://127.0.0.1:17321/`. The default global switch is off. The extension always connects to `127.0.0.1:17321`; use `daemon --port` only for an isolated dashboard/CLI daemon and do not expect the extension to follow it.
 
 ## CLI-first workflow
 
-1. Check the bridge with `node bin/mocklane.js status`.
-2. Add or replace a rule with `node bin/mocklane.js apply --json '<rule JSON>'`.
+1. Check the bridge with `bun run bin/mocklane.js status`.
+2. Add or replace a rule with `bun run bin/mocklane.js apply --json '<rule JSON>'`.
 3. Inspect the normalized rule using `list` or `scenarios <rule-id>`.
 4. Turn on only the intended rule with `enable <rule-id>`, then turn on the global switch with `global on`.
 5. Switch scenarios with `switch <rule-id> <scenario-id>`.
@@ -38,10 +38,10 @@ The browser stores rules and logs in IndexedDB. The daemon has no durable state.
 Use `request` only when a deterministic page-context request is useful for debugging a loaded page:
 
 ```bash
-node bin/mocklane.js request --url 'https://example.test/api/users' --method GET
-node bin/mocklane.js request --url 'https://example.test/api/orders' --method POST \
+bun run bin/mocklane.js request --url 'https://example.test/api/users' --method GET
+bun run bin/mocklane.js request --url 'https://example.test/api/orders' --method POST \
   --headers '{"content-type":"application/json"}' --body '{"preview":true}' --timeout 5000
-node bin/mocklane.js request --url 'https://example.test/api/users' --native
+bun run bin/mocklane.js request --url 'https://example.test/api/users' --native
 ```
 
 The default target is the active tab; `--tab-id ID` selects one explicit tab. Browser-internal, extension, and Mocklane dashboard tabs are rejected. Default requests use that page's intercepted `window.fetch`; `--native` uses the original fetch saved before Mocklane installed its wrapper. The command returns stable JSON containing `status`, `headers`, and raw `body`, or a stable error code for network/CORS, timeout, missing bridge, or an unavailable tab. Response bodies are limited to 2 MiB. This is an execution/debugging helper, not a substitute for the application's own business call; it will not make React state update unless the page's normal code consumes the response.

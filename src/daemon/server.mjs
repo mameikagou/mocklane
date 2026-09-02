@@ -112,7 +112,7 @@ export function createDaemonServer(options = {}) {
   const projectRoot = options.projectRoot || path.resolve(HERE, '../..');
   const builtDashboard = path.join(projectRoot, 'dist/dashboard');
   // Resolve this lazily for every request. The daemon is often started before
-  // `npm run build`; pinning the missing source directory at startup made the
+  // `bun run build`; pinning the missing source directory at startup made the
   // extension action keep returning 404 even after the dashboard was built.
   const dashboardStaticDir = () => {
     if (options.staticDir) return options.staticDir;
