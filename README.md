@@ -54,7 +54,7 @@ mocklane logs --limit 20                         # 5 · verify the hits
 mocklane global off                              # 6 · leave the page clean
 ```
 
-A rule is one endpoint plus named scenarios, with exactly one active:
+A rule is a complete request description: which requests it intercepts (`endpoint` + `matchType` + `method`), and which complete responses it can answer with — one scenario active at a time:
 
 ```json
 {
@@ -62,15 +62,28 @@ A rule is one endpoint plus named scenarios, with exactly one active:
   "endpoint": "/api/users",
   "matchType": "contains",
   "method": "GET",
+  "enabled": true,
   "scenarios": [
-    { "id": "ok",    "name": "OK",    "status": 200, "headers": {"content-type": "application/json"}, "body": "[{\"id\":1}]" },
-    { "id": "empty", "name": "Empty", "status": 200, "headers": {"content-type": "application/json"}, "body": "[]" }
+    {
+      "id": "ok",
+      "name": "OK",
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "bodyFile": "payloads/user-list.json"
+    },
+    {
+      "id": "empty",
+      "name": "Empty",
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": "[]"
+    }
   ],
   "activeScenarioId": "ok"
 }
 ```
 
-`endpoint` matches by `contains` (default) or `regex`; `method` is case-insensitive; statuses normalize to Fetch-compatible `200..599`; bodies stay raw strings (an intentionally empty body is respected). With `apply --file`, a scenario may reference `bodyFile` to keep a large payload in its own file, resolved relative to the rule file. Full schema: [`skills/browser-mock/references/schema.md`](skills/browser-mock/references/schema.md).
+A real response payload lives in its own file: `bodyFile` is resolved relative to the rule file, so a rule ships as one rule file plus a `payloads/` folder — see the working pair in [`examples/`](examples/ai-store-launch-query.json) (`ai-store-launch-query.json` / `ai-store-launch-execute.json` + `payloads/`). Inline `body` stays available for tiny responses (an intentionally empty body is respected). `endpoint` matches by `contains` (default) or `regex`; `method` is case-insensitive, `*` is supported; statuses normalize to Fetch-compatible `200..599`. Full schema: [`skills/browser-mock/references/schema.md`](skills/browser-mock/references/schema.md).
 
 ### Command reference
 

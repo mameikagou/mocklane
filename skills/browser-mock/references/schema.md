@@ -23,7 +23,7 @@
 }
 ```
 
-`apply` also accepts one `scenario` object or top-level `status`, `headers`, and `body` as a convenience for a one-scenario rule. When using `apply --file`, `bodyFile` (or `responseBodyFile`) may replace `body` at the top level or inside a scenario. The CLI resolves it relative to the rule file and sends the file contents as `body`; combining both sources is rejected. Header names are normalized to lowercase. Scenario IDs are de-duplicated with a numeric suffix when necessary.
+`apply` also accepts one `scenario` object or top-level `status`, `headers`, and `body` as a convenience for a one-scenario rule. When using `apply --file`, `bodyFile` (or `responseBodyFile`) may replace `body` at the top level or inside a scenario, referencing a **standalone payload file**. The CLI resolves it relative to the rule file and sends the file contents as `body`; combining both sources on the same slot is rejected. The intended layout for real rules is one rule file plus a `payloads/` folder, as in `examples/` (`ai-store-launch-query.json` / `ai-store-launch-execute.json` + `payloads/`). Header names are normalized to lowercase. Scenario IDs are de-duplicated with a numeric suffix when necessary.
 
 Mocklane returns a response before the native network call, but does not rewrite the intercepted request. Keep the rule endpoint and method identical to the real API. UI preview flags belong outside the business payload, and response/mock metadata belongs in the rule or a referenced payload file.
 
