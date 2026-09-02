@@ -298,7 +298,7 @@
   .button-ghost:hover { color: var(--ink-1); }
 
   /* ── 徽标：语义色只承担状态 ── */
-  .badge { display: inline-flex; align-items: center; gap: 6px; width: max-content; padding: 4px 7px; border-radius: 2px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: .06em; white-space: nowrap; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; flex: none; width: max-content; padding: 4px 7px; border-radius: 2px; font-family: var(--font-mono); font-size: 10px; line-height: 1; font-weight: 500; letter-spacing: .06em; white-space: nowrap; }
   .badge-dot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background-color: currentColor; }
   .badge-success { color: var(--ok); background-color: var(--ok-soft); }
   .badge-info { color: var(--tool); background-color: var(--tool-soft); }

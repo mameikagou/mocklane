@@ -4,17 +4,7 @@ import { Icon } from '../../ui/Icon.jsx';
 import { Select } from '../../ui/Select.jsx';
 import { Switch } from '../../ui/Switch.jsx';
 import { switchScenario, toggleRule } from '../../lib/store.js';
-
-function methodTone(method) {
-  return { GET: 'success', POST: 'info', PUT: 'warning', PATCH: 'warning', DELETE: 'danger' }[method] || 'muted';
-}
-
-function statusTone(status) {
-  const code = Number(status);
-  if (code >= 400) return 'danger';
-  if (code >= 300) return 'info';
-  return 'success';
-}
+import { methodTone, statusTone } from '../../lib/tones.js';
 
 function formatBody(body) {
   if (body === '' || body == null) return null;
