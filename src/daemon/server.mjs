@@ -130,8 +130,10 @@ export function createDaemonServer(options = {}) {
     return [...clients].find((client) => client.role === 'extension' && client.socket.readyState === WebSocket.OPEN) || null;
   }
 
-  function dashboardClients() {
-    return [...clients].filter((client) => client.role === 'dashboard' && client.socket.readyState === WebSocket.OPEN);
+  // Observers are dashboards and CLI subscribers (`mocklane wait`); both need
+  // the extension's live event stream. The extension itself only sends events.
+  function observerClients() {
+    return [...clients].filter((client) => (client.role === 'dashboard' || client.role === 'cli') && client.socket.readyState === WebSocket.OPEN);
   }
 
   function sendSocket(client, value) {
@@ -139,7 +141,7 @@ export function createDaemonServer(options = {}) {
   }
 
   function broadcast(value) {
-    for (const client of dashboardClients()) sendSocket(client, value);
+    for (const client of observerClients()) sendSocket(client, value);
   }
 
   function callExtension(command) {

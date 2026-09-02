@@ -89,3 +89,43 @@ Successful responses are `{ "ok": true, "data": ... }`. Errors use `{ "ok": fals
 ```
 
 Common stable request errors include `missing_url`, `invalid_url`, `invalid_headers`, `invalid_timeout`, `body_not_allowed`, `no_available_tab`, `tab_not_found`, `unsupported_tab`, `dashboard_tab_forbidden`, `tab_bridge_unavailable`, `request_timeout`, `network_error`, `response_too_large`, and `native_fetch_unavailable`.
+
+## Verification commands (wait / journey / report)
+
+These commands run in the CLI itself; the daemon relays the extension's event stream to CLI subscribers. They never mutate rule state.
+
+`wait [--rule <rule-id>] [--scenario <scenario-id>] [--timeout ms]` subscribes to live hit events and blocks until a hit matches every given filter (omitted filters match anything). Only hits that arrive after the wait starts count. Default timeout 15000 ms, maximum 600000 ms. Success:
+
+```json
+{ "ok": true, "data": { "hit": { "id": "...", "ruleId": "user-list", "endpoint": "/api/users", "url": "https://example.test/api/users", "method": "GET", "scenarioId": "ok", "status": 200, "timestamp": "..." } } }
+```
+
+Stable errors: `wait_timeout`, `extension_not_connected` (fail-fast at subscribe time), `extension_disconnected` (mid-wait), `daemon_unreachable`, `invalid_timeout`. Exit code is 1 on any failure.
+
+`journey --file <journey.json>` executes a scenario chain. The file is `{ "journey": "name", "steps": [ ... ] }` where each step is an object with exactly one action key:
+
+| Step | Payload |
+| --- | --- |
+| `{ "apply": ... }` | `{ "file": "rule.json" }` (relative to the journey file; `bodyFile` inside resolves relative to the rule file) or `{ "rule": {...} }` (inline; `bodyFile` resolves relative to the journey file) |
+| `{ "switch": ... }` | `{ "rule": "rule-id", "scenario": "scenario-id" }` |
+| `{ "enable" / "disable": ... }` | `{ "rule": "rule-id" }` |
+| `{ "global": ... }` | `"on"` / `"off"` or `{ "value": "on" }` |
+| `{ "wait": ... }` | `{ "rule": "rule-id", "scenario": "scenario-id", "timeout": 10000 }` (all optional, same semantics as standalone `wait`) |
+
+Each step prints one line: `{ "ok": true, "step": 0, "action": "switch", "data": {...} }`. The first failing step prints its error, stops the run, and sets exit code 1. A clean run ends with `{ "ok": true, "journey": "name", "steps": 3 }`. File-level errors use `missing_journey_file`, `invalid_journey_file`, or `invalid_journey`.
+
+`report` composes `status` + `list` into a session summary:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "globalEnabled": false,
+    "totalHits": 12,
+    "rules": [
+      { "id": "user-list", "endpoint": "/api/users", "enabled": true, "activeScenarioId": "ok", "hitCount": 12, "lastHitAt": "..." }
+    ],
+    "neverHit": ["promo-banner"]
+  }
+}
+```

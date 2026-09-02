@@ -33,6 +33,33 @@ Every command emits one stable JSON object. Treat `{ "ok": false, "error": ... }
 
 The browser stores rules and logs in IndexedDB. The daemon has no durable state. `status`, `list`, `scenarios`, `logs`, and `match` are read-only queries; they do not write or broadcast state. A browser hit records one log entry and emits one transient hit event.
 
+## Verify the loop: wait, journey, report
+
+`wait` is the assertion primitive — it blocks until the page actually triggers a matching hit, so you never need to poll `logs` in a loop:
+
+```bash
+bun run bin/mocklane.js wait --rule user-list --scenario ok --timeout 10000
+```
+
+It prints `{"ok":true,"data":{"hit":{...}}}` on the first matching hit, or a stable error code: `wait_timeout`, `extension_not_connected` (fail-fast), `extension_disconnected` (mid-wait), or `daemon_unreachable`. Only future hits count — start the wait first, then drive the page; use `logs` for traffic that already happened. Default timeout is 15000 ms (max 600000). Exit code is 1 on any failure.
+
+`journey` runs a scenario chain from a JSON file, one JSON line per step:
+
+```json
+{
+  "journey": "checkout-timeout",
+  "steps": [
+    { "switch": { "rule": "checkout", "scenario": "timeout" } },
+    { "wait":   { "rule": "checkout", "scenario": "timeout", "timeout": 10000 } },
+    { "switch": { "rule": "checkout", "scenario": "ok" } }
+  ]
+}
+```
+
+Each step is one action — `apply` (`{"apply":{"file":"rule.json"}}` resolves relative to the journey file, or `{"apply":{"rule":{...}}}` inline), `switch`, `enable`, `disable`, `global` (`{"global":"on"}`), or `wait`. Steps execute in order against the same command paths as the standalone CLI; the first failing step prints its error line, stops the run, and sets exit code 1. A successful run ends with `{"ok":true,"journey":"checkout-timeout","steps":3}`. Between step lines you can run your own browser/rendering checks — Mocklane only owns the interface layer.
+
+`report` summarizes the session: per-rule `hitCount`/`lastHitAt`, `totalHits`, `neverHit` rule ids (wasted config), and the gate state — read it before tearing down to confirm every configured rule actually fired.
+
 ## Debugging a page request
 
 Use `request` only when a deterministic page-context request is useful for debugging a loaded page:

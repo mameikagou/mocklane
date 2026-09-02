@@ -100,3 +100,25 @@ test('daemon relays dashboard RPC to extension without owning rule data', async 
   dashboard.close();
   await daemon.close();
 });
+
+test('daemon relays extension events to cli subscribers (mocklane wait)', async () => {
+  const daemon = await startDaemon({ port: 0 });
+  const url = `ws://127.0.0.1:${daemon.address.port}/ws`;
+  const extension = await openSocket(url, 'chrome-extension://abcdefghijklmnop');
+  const cli = await openSocket(url);
+  extension.send(JSON.stringify({ kind: 'hello', role: 'extension' }));
+  cli.send(JSON.stringify({ kind: 'hello', role: 'cli' }));
+  const hello = await nextMessage(cli, (message) => message.kind === 'hello');
+  assert.equal(hello.extensionConnected, true);
+  const hitEvent = nextMessage(cli, (message) => message.kind === 'event' && message.event === 'hit');
+  extension.send(JSON.stringify({
+    kind: 'event',
+    event: 'hit',
+    hit: { id: 'h1', ruleId: 'user-list', scenarioId: 'ok', url: 'https://example.test/api/users', method: 'GET', status: 200, timestamp: '2026-09-02T00:00:00.000Z' },
+  }));
+  const received = await hitEvent;
+  assert.equal(received.hit.ruleId, 'user-list');
+  extension.close();
+  cli.close();
+  await daemon.close();
+});

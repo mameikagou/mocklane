@@ -99,8 +99,36 @@ A real response payload lives in its own file: `bodyFile` is resolved relative t
 | `logs [--limit N]` | Recent hits: time, request, scenario, status |
 | `match --url --method` | Dry-run the matcher against a URL |
 | `request --url [--tab-id] [--native]` | Ask a page tab to fetch — see below |
+| `wait [--rule] [--scenario] [--timeout]` | Block until a matching hit arrives — assertion without polling |
+| `journey --file <journey.json>` | Run a scenario chain, one JSON line per step |
+| `report` | Session summary: per-rule hit counts, never-hit rules, gate state |
 
 `request` deserves a note: it asks **one** browser tab (active by default, or `--tab-id`) to perform a real page `fetch`, so an enabled rule can answer it and produce a normal hit log. `--native` bypasses the Mocklane wrapper and calls the original page fetch. Results are stable JSON with `status`, `headers`, raw `body`; network/CORS failures, a missing bridge, and timeouts return stable error codes; bodies cap at 2 MiB. It's a debugging aid — it deliberately refuses browser-internal and Mocklane dashboard tabs, and it cannot mutate a page's React state.
+
+### Verify the loop
+
+Configuring rules is only half the job — the agent also needs to know the page **actually consumed** them. Three commands close that loop at the interface layer (rendering/DOM checks belong to your browser-driving tooling, not Mocklane):
+
+```bash
+mocklane wait --rule checkout --scenario timeout --timeout 10000
+# {"ok":true,"data":{"hit":{...}}}  — or a stable error: wait_timeout,
+# extension_not_connected, extension_disconnected; exit code 1 on failure
+```
+
+`wait` only observes **future** hits: start the wait, then drive the page. `journey` chains steps from a JSON file — each step is one action (`apply`, `switch`, `enable`, `disable`, `global`, `wait`), prints one JSON line, and the run stops at the first failure:
+
+```json
+{
+  "journey": "checkout-timeout",
+  "steps": [
+    { "switch": { "rule": "checkout", "scenario": "timeout" } },
+    { "wait":   { "rule": "checkout", "scenario": "timeout", "timeout": 10000 } },
+    { "switch": { "rule": "checkout", "scenario": "ok" } }
+  ]
+}
+```
+
+`mocklane report` reads the persistent per-rule counters and answers the teardown question — did everything I configured actually fire? Per-rule `hitCount`/`lastHitAt`, `totalHits`, `neverHit` ids (wasted config), and gate state in one object.
 
 ## Dashboard
 
