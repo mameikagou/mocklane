@@ -208,6 +208,10 @@
   .notice-error { color: var(--fail); border: 1px solid color-mix(in oklch, var(--fail) 45%, var(--line)); background: var(--fail-soft); }
   .notice-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
   .endpoint-panel, .log-panel { min-height: 510px; padding: 21px; }
+  /* Hit log 是证据长河：面板锚定在视口内 sticky 跟随，表体内部滚动，表头常驻 */
+  .log-panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+  .log-table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .log-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-1); }
   .section-heading { padding: 1px 1px 17px; border-bottom: 1px solid var(--line); }
   .endpoint-list { display: flex; flex-direction: column; }
   .endpoint-row { display: flex; justify-content: space-between; gap: 22px; align-items: center; padding: 18px 2px; border-bottom: 1px solid var(--line-subtle); }
@@ -225,7 +229,6 @@
   .select-control { min-width: 118px; max-width: 150px; color: var(--ink-1); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 2px; padding: 7px 25px 7px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; transition: background-color var(--dur-micro) var(--ease-expo), border-color var(--dur-micro) var(--ease-expo), color var(--dur-micro) var(--ease-expo); }
   .select-control:hover { border-color: var(--amber-dim); background-color: var(--surface-3); }
   .log-panel { overflow: hidden; }
-  .log-table-wrap { overflow-x: auto; }
   .log-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
   .log-table th { color: var(--ink-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .12em; text-align: left; font-size: 9px; font-weight: 500; padding: 13px 6px 10px; }
   .log-table th:first-child, .log-table td:first-child { width: 70px; padding-left: 2px; }
@@ -289,6 +292,8 @@
   .topbar { padding: 0 22px; }
   .workspace { padding: 24px 22px 12px; }
   .overview-grid, .content-grid { grid-template-columns: minmax(0, 1fr); }
+  /* 单列布局下 sticky 会整屏吸顶，退回普通文档流 */
+  .log-panel { position: static; max-height: none; }
   .footer { padding-left: 22px; padding-right: 22px; }
 }
 
